@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+build/
+dist/
+
+# Sidecar local data (никогда не коммитить — содержит session cookies)
+sidecar/.env
+sidecar/storage/
+sidecar/user_data/
+sidecar/downloads/
+sidecar/uploads/
+sidecar/jobs.jsonl
+sidecar/logs/
+
+# Node (если в будущем появится bundler для CEP)
+node_modules/
+package-lock.json
+yarn.lock
+
+# CEP / Adobe
+*.zxp
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Secrets — на всякий случай ловим
+*secret*.js
+*secret*.json
+*.key
+*.pem
+
+# Recon artifacts — содержат HAR с сессионными токенами Phygital+ и Chromium-профиль
+sidecar/recon-captures/
+sidecar/recon-user-data/
+
+# Local test outputs (не для гита)
+sidecar/out/
+sidecar/out.png
+Test_image/
+
+# setuptools egg-info генерится локально
+sidecar/phygital_studio_sidecar.egg-info/

@@ -1,0 +1,46 @@
+{
+  "_comment": "Пример пресетов нод для UI обеих панелей. Реальные id/params снимаются recon-захватом одной ручной генерации в UI Phygital (см. Phygital-bot/recon/). Поля dataType/options берутся из Phygital-bot/nodes_dump.json. Файл пока не используется кодом — обоснование в docs/ROADMAP.md (Phase 4).",
+  "presets": [
+    {
+      "id": "nano-banana-text2img",
+      "label": "Nano Banana — text→image",
+      "kind": "image",
+      "node_id": 94,
+      "node_global_id": "Phygital Creator/phygc-rnd-gemini-image-api",
+      "average_time_sec": 45,
+      "default_params": { "model_name": "v3", "ratio": "default", "resolution": "k2" }
+    },
+    {
+      "id": "sora-text2video",
+      "label": "Sora — text→video",
+      "kind": "video",
+      "node_global_id": "Phygital Creator/phygc-rnd-sora-api",
+      "average_time_sec": 1000,
+      "default_params": { "seconds": 5, "aspect_ratio": "16:9", "_NOTE_": "точный набор params уточнить через recon" }
+    },
+    {
+      "id": "veo-text2video",
+      "label": "VEO — text→video",
+      "kind": "video",
+      "node_global_id": "Phygital Creator/phygc-rnd-veo-api",
+      "average_time_sec": 1000,
+      "default_params": { "_NOTE_": "уточнить через recon" }
+    },
+    {
+      "id": "runway-image2video",
+      "label": "Runway — image→video",
+      "kind": "video",
+      "node_global_id": "Phygital Creator/phygc-rnd-api-runway",
+      "average_time_sec": 300,
+      "default_params": { "_NOTE_": "уточнить через recon" }
+    },
+    {
+      "id": "kling-omni",
+      "label": "Kling Omni — multi-element video",
+      "kind": "video",
+      "node_global_id": "Phygital Creator/phygc-rnd-api-kling-omni",
+      "average_time_sec": 1500,
+      "default_params": { "model_name": "kling-v3-omni", "_NOTE_": "уточнить через recon" }
+    }
+  ]
+}
