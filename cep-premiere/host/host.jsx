@@ -7,9 +7,16 @@
 //   getSourceInOut()              — клип в Source Monitor + его In/Out marks
 //   importToBin(path)
 //   revealInBin(projectItemId)
+//   diagApis()                    — диагностика доступных API (для debug)
 //
 // All paths are absolute. Functions never throw — wrap in try/catch and
 // return {ok:false, error}.
+//
+// QE DOM: ряд методов (exportFrameJPEG, getInPoint marks и т.д.) отсутствуют
+// на «стабильном» Sequence/ProjectItem DOM в части билдов Pr, но всегда есть
+// в QE (Quality Engineering) DOM. Включаем через app.enableQE() — это легаси
+// API, которое Adobe держит ещё с Pr CS5 и не выпиливает из-за множества
+// production-панелей, на него полагающихся.
 
 #target premierepro
 
@@ -25,13 +32,15 @@ function _err(code, reason) {
 function _itemKind(pi) {
   // ProjectItem.type: 1=clip, 2=bin, 3=root, 4=file
   // Better: inspect getMediaPath + nodeId. Fall back to extension sniffing.
+  // Расширения держим максимально полными — иначе клип возвращается как
+  // 'unknown' и проскакивает мимо image/video-валидации на клиенте.
   try {
     if (pi.getMediaPath) {
       var p = String(pi.getMediaPath() || '');
       var ext = p.split('.').pop().toLowerCase();
-      if (['mp4','mov','avi','mkv','m4v','mxf'].indexOf(ext) >= 0) return 'video';
-      if (['jpg','jpeg','png','tif','tiff','psd','heic'].indexOf(ext) >= 0) return 'image';
-      if (['wav','mp3','aac','aiff'].indexOf(ext) >= 0) return 'audio';
+      if (['mp4','mov','avi','mkv','m4v','mxf','webm','flv','mts','m2ts','ts','3gp','3g2','wmv','asf','vob','hevc','h264'].indexOf(ext) >= 0) return 'video';
+      if (['jpg','jpeg','png','tif','tiff','psd','heic','webp','bmp','gif','exr','dpx','tga'].indexOf(ext) >= 0) return 'image';
+      if (['wav','mp3','aac','aiff','flac','ogg','m4a','wma'].indexOf(ext) >= 0) return 'audio';
     }
   } catch (e) {}
   return 'unknown';
@@ -136,72 +145,354 @@ function getSourceMonitorItem() {
   } catch (e) { return _err('exception', String(e)); }
 }
 
+// QE DOM legacy на Windows работает через MBCS — если путь содержит non-ASCII
+// (типичный кейс: имя юзера на кириллице, тогда Folder.temp = C:\Users\Глеб\
+// AppData\Local\Temp), методы exportFrameJPEG/PNG/TIFF/Targa/DPX молча
+// возвращаются БЕЗ создания файла и БЕЗ exception. Поэтому выбираем
+// ASCII-safe директорию в первую очередь.
+function _isWin() {
+  try { return ($.os || '').toLowerCase().indexOf('windows') >= 0; } catch (e) { return true; }
+}
+
+function _nativeSep() { return _isWin() ? '\\' : '/'; }
+
+// Нормализуем path → native separators. QE на Windows требует backslashes.
+function _nativePath(p) {
+  if (!p) return p;
+  if (_isWin()) return String(p).replace(/\//g, '\\');
+  return String(p).replace(/\\/g, '/');
+}
+
+function _isAscii(s) { return !/[^\x00-\x7F]/.test(String(s || '')); }
+
+// Проверяем что в директорию реально можем писать (создаём тестовый файл).
+function _canWrite(dir) {
+  try {
+    var probePath = dir + _nativeSep() + '.probe_' + (new Date().getTime());
+    var pf = new File(_nativePath(probePath));
+    if (!pf.open('w')) return false;
+    pf.write('1'); pf.close();
+    var ok = pf.exists && pf.length > 0;
+    try { pf.remove(); } catch (e) {}
+    return ok;
+  } catch (e) { return false; }
+}
+
 function _tmpDir() {
-  // %TEMP% or system temp. CEP exposes via Folder.temp.
-  var d = Folder.temp.fsName + '/PhygitalStudio_frames';
-  var f = new Folder(d);
-  if (!f.exists) f.create();
-  return d;
+  var candidates = [];
+  if (_isWin()) {
+    // ProgramData всегда ASCII и world-writable на всех Windows билдах.
+    candidates.push('C:\\ProgramData\\PhygitalStudio\\frames');
+    candidates.push('C:\\Temp\\PhygitalStudio_frames');
+    candidates.push('C:\\Windows\\Temp\\PhygitalStudio_frames');
+  } else {
+    candidates.push('/tmp/PhygitalStudio_frames');
+    candidates.push('/var/tmp/PhygitalStudio_frames');
+  }
+  // Последний шанс — Folder.temp (может содержать Cyrillic, для QE плохо,
+  // но если ASCII-варианты вообще недоступны — лучше чем ничего).
+  try {
+    candidates.push(Folder.temp.fsName + _nativeSep() + 'PhygitalStudio_frames');
+  } catch (e) {}
+
+  // Сначала ищем ASCII-путь который можно создать И в который можно писать.
+  for (var i = 0; i < candidates.length; i++) {
+    var p = _nativePath(candidates[i]);
+    if (!_isAscii(p)) continue;
+    try {
+      var f = new Folder(p);
+      if (!f.exists) f.create();
+      if (f.exists && _canWrite(p)) return p;
+    } catch (e) {}
+  }
+  // Деградация: любой путь, который удалось создать.
+  for (var j = 0; j < candidates.length; j++) {
+    var p2 = _nativePath(candidates[j]);
+    try {
+      var f2 = new Folder(p2);
+      if (!f2.exists) f2.create();
+      if (f2.exists) return p2;
+    } catch (e) {}
+  }
+  // Совсем крайний случай.
+  return _nativePath(_isWin() ? 'C:\\ProgramData\\PhygitalStudio\\frames' : '/tmp/PhygitalStudio_frames');
+}
+
+// Безопасно включает QE DOM. Возвращает true если qe.project доступен.
+function _ensureQE() {
+  try {
+    if (typeof app.enableQE === 'function') app.enableQE();
+    return (typeof qe !== 'undefined') && qe && qe.project;
+  } catch (e) { return false; }
+}
+
+// FPS активной sequence — нужен для построения корректной timecode-строки.
+// Пробуем несколько источников: getSettings().videoFrameRate, потом timebase.
+// Падаем на 30 если ничего не известно.
+function _seqFps(seq) {
+  try {
+    if (typeof seq.getSettings === 'function') {
+      var s = seq.getSettings();
+      if (s && s.videoFrameRate) {
+        var d = Number(s.videoFrameRate.seconds != null ? s.videoFrameRate.seconds : s.videoFrameRate);
+        if (d > 0) return 1 / d;
+      }
+    }
+  } catch (e) {}
+  try {
+    // Pr internal: 254016000000 ticks/sec. timebase = ticks/frame.
+    if (seq.timebase) {
+      var tb = Number(seq.timebase);
+      if (tb > 0) return 254016000000 / tb;
+    }
+  } catch (e) {}
+  return 30;
+}
+
+function _pad2(n) { return (n < 10 ? '0' : '') + n; }
+
+// "HH:MM:SS:FF" timecode из секунд. Drop-frame не различаем — для экспорта
+// единичного кадра достаточно non-drop-формы.
+function _toTimecode(sec, fps) {
+  var fpsInt = Math.max(1, Math.round(fps));
+  var tf = Math.round(sec * fpsInt);
+  var f = tf % fpsInt;
+  var totalSec = Math.floor(tf / fpsInt);
+  var s = totalSec % 60;
+  var m = Math.floor(totalSec / 60) % 60;
+  var h = Math.floor(totalSec / 3600);
+  return _pad2(h) + ':' + _pad2(m) + ':' + _pad2(s) + ':' + _pad2(f);
 }
 
 // Экспортирует кадр из активной sequence на текущей позиции playhead'а.
-// Это и есть «то что юзер видит в превью таймлайна».
-// API: Sequence.exportFrameJPEG(outputPath) — единственный аргумент (Time
-// объекта быть НЕ должно, иначе Pr бросает "Not Enough Parameters").
+//
+// Проблема: QE DOM `exportFrameJPEG` имеет легаси-сигнатуру с ОБЯЗАТЕЛЬНЫМ
+// вторым аргументом — timecode. Разные билды Pr принимают этот аргумент в
+// разных форматах: "HH:MM:SS:FF" / ticks как строка / секунды как строка /
+// иногда пустая строка трактуется как "playhead position". Поэтому
+// перебираем (метод × формат_времени) пока не получим непустой файл.
+//
+// Порядок методов: JPEG → PNG → TIFF → Targa → DPX → стабильный seq.* (1-arg).
+// Все попытки попадают в attempts log — клиент пишет его в console.error,
+// чтобы было видно, какой именно вариант сработал/упал.
 function exportTimelineFrame() {
   try {
     var seq = app.project.activeSequence;
     if (!seq) return _err('no_active_sequence');
-    var ph = seq.getPlayerPosition();
+    var ph = seq.getPlayerPosition && seq.getPlayerPosition();
     var phSec = ph ? Number(ph.seconds) : 0;
-    var outPath = _tmpDir() + '/frame_' + (new Date().getTime()) + '_' + Math.floor(Math.random() * 1e6) + '.jpg';
-    seq.exportFrameJPEG(outPath);
-    var f = new File(outPath);
-    if (!f.exists) return _err('export_failed', 'file_not_created');
-    return _ok({ framePath: outPath, timecode: String(phSec), sequenceName: String(seq.name) });
+    var phTicks = '';
+    try { if (ph && ph.ticks != null) phTicks = String(ph.ticks); } catch (e) {}
+    var fps = _seqFps(seq);
+    var tc = _toTimecode(phSec, fps);
+    var baseDir = _tmpDir();
+    var stamp = (new Date().getTime()) + '_' + Math.floor(Math.random() * 1e6);
+
+    var attempts = [];
+    var attemptIdx = 0;
+
+    // baseDir уже native, но всё равно прогоняем через _nativePath для уверенности.
+    function freshPath(ext) {
+      return _nativePath(baseDir + _nativeSep() + 'frame_' + stamp + '_' + (attemptIdx++) + '.' + ext);
+    }
+
+    // Диагностика: если все QE-попытки потом упадут — поможет видеть состояние dir.
+    attempts.push('baseDir=' + baseDir);
+    attempts.push('baseDir.ascii=' + _isAscii(baseDir));
+    attempts.push('baseDir.writable=' + _canWrite(baseDir));
+
+    // Разные QE-билды Pr ждут разный 2nd arg. Перебираем все варианты.
+    var timeArgs = [
+      { tag: 'tc',    val: tc },
+      { tag: 'ticks', val: phTicks },
+      { tag: 'secs',  val: String(phSec) },
+      { tag: 'empty', val: '' }
+    ];
+
+    var qeSeq = null;
+    if (_ensureQE()) {
+      try { qeSeq = qe.project.getActiveSequence(); }
+      catch (e) { attempts.push('qe.getActiveSequence:' + String(e)); }
+      if (!qeSeq) attempts.push('qe.getActiveSequence:null');
+    } else {
+      attempts.push('qe:unavailable');
+    }
+
+    // Бывает что QE пишет файл не туда куда мы попросили (например меняет
+     // расширение jpg→jpeg, или скидывает рядом). Сканируем директорию по
+    // нашему stamp'у — если что-то с правильным prefix'ом появилось.
+    function scanForOutput() {
+      try {
+        var folder = new Folder(baseDir);
+        if (!folder.exists) return null;
+        var prefix = 'frame_' + stamp;
+        var files = folder.getFiles(function (f) {
+          return (f instanceof File) && String(f.name).indexOf(prefix) === 0;
+        });
+        if (files && files.length) {
+          for (var k = 0; k < files.length; k++) {
+            if (files[k].length > 0) return files[k].fsName;
+          }
+        }
+      } catch (e) {}
+      return null;
+    }
+
+    function tryQEMethod(methodName, ext) {
+      if (!qeSeq) return null;
+      if (typeof qeSeq[methodName] !== 'function') {
+        attempts.push('qe.' + methodName + ':not_function');
+        return null;
+      }
+      for (var i = 0; i < timeArgs.length; i++) {
+        var ta = timeArgs[i];
+        if (ta.tag === 'ticks' && !ta.val) continue;
+        var outPath = freshPath(ext);
+        var label = 'qe.' + methodName + '[' + ta.tag + '=' + ta.val + ']';
+        try {
+          var rv = qeSeq[methodName](outPath, ta.val);
+          var f = new File(outPath);
+          var rvHint = (typeof rv === 'boolean' || typeof rv === 'number') ? (',rv=' + rv) : '';
+          if (f.exists && f.length > 0) {
+            attempts.push(label + ':ok' + rvHint);
+            return outPath;
+          }
+          // QE мог записать рядом с другим расширением — сканируем.
+          var scanned = scanForOutput();
+          if (scanned) {
+            attempts.push(label + ':ok_scanned=' + scanned + rvHint);
+            return scanned;
+          }
+          attempts.push(label + ':no_file' + rvHint + ',path=' + outPath);
+        } catch (e) {
+          attempts.push(label + ':' + String(e).replace(/[\r\n]+/g, ' ').slice(0, 80));
+        }
+      }
+      return null;
+    }
+
+    var result = tryQEMethod('exportFrameJPEG', 'jpg');
+    if (!result) result = tryQEMethod('exportFramePNG',  'png');
+    if (!result) result = tryQEMethod('exportFrameTIFF', 'tif');
+    if (!result) result = tryQEMethod('exportFrameTarga', 'tga');
+    if (!result) result = tryQEMethod('exportFrameDPX',  'dpx');
+
+    // Резерв: стабильный Sequence DOM (на некоторых билдах есть с 1-arg).
+    if (!result) {
+      if (typeof seq.exportFrameJPEG === 'function') {
+        var outPath = freshPath('jpg');
+        try {
+          seq.exportFrameJPEG(outPath);
+          var f2 = new File(outPath);
+          if (f2.exists && f2.length > 0) {
+            attempts.push('seq.exportFrameJPEG:ok');
+            result = outPath;
+          } else {
+            attempts.push('seq.exportFrameJPEG:no_file');
+          }
+        } catch (e) {
+          attempts.push('seq.exportFrameJPEG:' + String(e).replace(/[\r\n]+/g, ' ').slice(0, 80));
+        }
+      } else {
+        attempts.push('seq.exportFrameJPEG:not_function');
+      }
+    }
+
+    if (!result) {
+      return _err('export_failed', 'attempts=' + attempts.join(' | '));
+    }
+
+    return _ok({
+      framePath: result,
+      timecode: tc,
+      playheadSec: phSec,
+      fps: fps,
+      sequenceName: String(seq.name),
+      attempts: attempts,
+    });
   } catch (e) { return _err('export_failed', String(e)); }
 }
 
 // Source Monitor → клип + его In/Out marks (как секунды).
 // Если In/Out не выставлены — отдаём 0..duration (весь клип).
+//
+// Идём по нескольким API, потому что на разных билдах Pr доступны разные:
+//   1) Стабильный ProjectItem: getInPoint(1)/getOutPoint(1)/getDuration()
+//   2) QE DOM clip.getInPoint()/getOutPoint() (TickTime)
+//   3) QE source monitor: sm.player.getInPoint()/getOutPoint() в тиках
+//
+// Источник правды для duration — сначала pi.getDuration, потом метаданные
+// через ffprobe на стороне sidecar если ничего не дало.
 function getSourceInOut() {
+  var attempts = [];
   try {
     var sm = app.sourceMonitor;
     if (!sm) return _err('no_source_monitor');
     var pi = sm.getProjectItem ? sm.getProjectItem() : null;
     if (!pi) return _err('no_source_monitor_clip');
 
-    // ProjectItem.getInPoint(mediaType)/getOutPoint(mediaType) — Pr 22+.
-    // mediaType: 1=video, 2=audio. Возвращают TickTime (.seconds).
-    var inSec = 0;
-    var outSec = 0;
-    var durSec = 0;
+    var inSec = NaN, outSec = NaN, durSec = NaN;
+
+    // ── duration ──
     try {
       if (pi.getDuration) {
         var dur = pi.getDuration();
-        durSec = dur ? Number(dur.seconds || dur) : 0;
-      }
-    } catch (_e1) {}
+        var d = dur ? Number(dur.seconds != null ? dur.seconds : dur) : NaN;
+        if (!isNaN(d) && d > 0) { durSec = d; attempts.push('dur:pi.getDuration=' + d); }
+      } else { attempts.push('dur:pi.getDuration:not_function'); }
+    } catch (e) { attempts.push('dur:pi.getDuration:' + String(e)); }
+
+    // ── in/out от стабильного DOM ──
     try {
       if (pi.getInPoint) {
         var t1 = pi.getInPoint(1);
-        if (t1 && typeof t1.seconds !== 'undefined') inSec = Number(t1.seconds);
+        if (t1 && typeof t1.seconds !== 'undefined') { inSec = Number(t1.seconds); attempts.push('in:pi.getInPoint=' + inSec); }
       }
-    } catch (_e2) {}
+    } catch (e) { attempts.push('in:pi.getInPoint:' + String(e)); }
     try {
       if (pi.getOutPoint) {
         var t2 = pi.getOutPoint(1);
-        if (t2 && typeof t2.seconds !== 'undefined') outSec = Number(t2.seconds);
+        if (t2 && typeof t2.seconds !== 'undefined') { outSec = Number(t2.seconds); attempts.push('out:pi.getOutPoint=' + outSec); }
       }
-    } catch (_e3) {}
+    } catch (e) { attempts.push('out:pi.getOutPoint:' + String(e)); }
 
-    // Sanity: если In==Out или Out<=In — считаем что marks не выставлены, берём весь клип
-    if (!(outSec > inSec)) {
-      inSec = 0;
-      outSec = durSec > 0 ? durSec : 0;
+    // ── QE DOM fallback (для in/out и duration) ──
+    if (isNaN(inSec) || isNaN(outSec) || isNaN(durSec)) {
+      if (_ensureQE()) {
+        try {
+          // QE source monitor имеет player с getPosition/getInPoint/getOutPoint
+          var qsm = qe.source;
+          if (qsm) {
+            if (isNaN(inSec) && typeof qsm.getInPoint === 'function') {
+              var qi = qsm.getInPoint();
+              // QE возвращает TickTime-обёртку с .ticks или строку "HH:MM:SS:FF"
+              var qiSec = _qeTimeToSec(qi);
+              if (!isNaN(qiSec)) { inSec = qiSec; attempts.push('in:qe.source.getInPoint=' + inSec); }
+            }
+            if (isNaN(outSec) && typeof qsm.getOutPoint === 'function') {
+              var qo = qsm.getOutPoint();
+              var qoSec = _qeTimeToSec(qo);
+              if (!isNaN(qoSec)) { outSec = qoSec; attempts.push('out:qe.source.getOutPoint=' + outSec); }
+            }
+          } else { attempts.push('qe.source:unavailable'); }
+        } catch (e) { attempts.push('qe.source:' + String(e)); }
+      } else {
+        attempts.push('qe:unavailable');
+      }
     }
-    if (!(outSec > inSec)) {
-      return _err('invalid_range', 'in=' + inSec + ' out=' + outSec + ' dur=' + durSec);
+
+    // ── Sanity: если марки не выставлены — берём весь клип ──
+    var hadMarks = !isNaN(inSec) && !isNaN(outSec) && outSec > inSec;
+    if (!hadMarks) {
+      if (isNaN(inSec)) inSec = 0;
+      if (!(outSec > inSec)) outSec = !isNaN(durSec) && durSec > 0 ? durSec : NaN;
+    }
+
+    if (isNaN(inSec) || isNaN(outSec) || !(outSec > inSec)) {
+      return _err('invalid_range',
+        'in=' + inSec + ' out=' + outSec + ' dur=' + durSec +
+        ' | attempts=' + attempts.join(' / ')
+      );
     }
 
     return _ok({
@@ -211,9 +502,229 @@ function getSourceInOut() {
       kind: _itemKind(pi),
       inSec: inSec,
       outSec: outSec,
-      durationSec: durSec,
+      durationSec: isNaN(durSec) ? null : durSec,
+      hadMarks: hadMarks,
+      attempts: attempts,
     });
-  } catch (e) { return _err('exception', String(e)); }
+  } catch (e) { return _err('exception', String(e) + ' | attempts=' + attempts.join(' / ')); }
+}
+
+// Преобразовать значение времени (TickTime/число/строка) в секунды или NaN.
+// Объединённая логика для seq.getInPoint/getOutPoint/playerPosition и QE-аналогов.
+function _ptToSec(t) {
+  if (t == null) return NaN;
+  if (typeof t === 'number') return t;
+  if (typeof t === 'string') {
+    if (/^-?\d+(\.\d+)?$/.test(t)) { var n = Number(t); if (!isNaN(n)) return n; }
+    return NaN;
+  }
+  if (typeof t === 'object') {
+    try {
+      if (t.seconds != null) {
+        var s = Number(t.seconds);
+        if (!isNaN(s)) return s;
+      }
+    } catch (e) {}
+    try {
+      if (t.ticks != null) {
+        var ticks = Number(t.ticks);
+        if (!isNaN(ticks)) return ticks / 254016000000;
+      }
+    } catch (e) {}
+  }
+  return NaN;
+}
+
+// Найти ТОПОВЫЙ видео-clip в активной sequence, перекрывающий заданную
+// секунду на таймлайне. Идём по trackcs сверху вниз: videoTracks[n-1] = верхний
+// V_n, videoTracks[0] = V1. Возвращаем {trackIdx, clip} или null.
+function _findTopmostVideoClipAt(seq, atSec, attempts) {
+  try {
+    var n = seq.videoTracks.numTracks;
+    for (var t = n - 1; t >= 0; t--) {
+      var trk = seq.videoTracks[t];
+      if (!trk) continue;
+      try { if (trk.isMuted && trk.isMuted()) continue; } catch (e) {}
+      for (var c = 0; c < trk.clips.numItems; c++) {
+        var cl = trk.clips[c];
+        var s = Number(cl.start.seconds);
+        var e2 = Number(cl.end.seconds);
+        if (atSec >= s && atSec < e2) {
+          attempts.push('found:V' + (t+1) + ':' + String(cl.name) + '[' + s.toFixed(3) + '..' + e2.toFixed(3) + ']');
+          return { trackIdx: t, clip: cl };
+        }
+      }
+    }
+  } catch (ex) { attempts.push('find_clip:' + String(ex)); }
+  attempts.push('no_clip_at_sec=' + atSec);
+  return null;
+}
+
+// Возвращает source-relative секунду playhead'а активной sequence + путь
+// к исходному медиа-файлу клипа под playhead'ом. Клиент потом дёргает
+// sidecar /extract-frame чтобы извлечь кадр через ffmpeg — это надёжнее
+// чем QE DOM, который на части билдов Pr молча возвращает false без файла.
+function getTimelineFrameSource() {
+  var attempts = [];
+  try {
+    var seq = app.project.activeSequence;
+    if (!seq) return _err('no_active_sequence');
+    var ph = seq.getPlayerPosition && seq.getPlayerPosition();
+    if (!ph) return _err('no_playhead');
+    var phSec = Number(ph.seconds);
+    attempts.push('phSec=' + phSec);
+
+    var found = _findTopmostVideoClipAt(seq, phSec, attempts);
+    if (!found) return _err('no_clip_at_playhead', 'attempts=' + attempts.join(' | '));
+
+    var pi = found.clip.projectItem;
+    if (!pi) return _err('no_project_item');
+    var srcPath = String(pi.getMediaPath ? pi.getMediaPath() : '');
+    if (!srcPath) return _err('no_media_path');
+
+    var clipStart = Number(found.clip.start.seconds);
+    var clipInSrc = found.clip.inPoint ? _ptToSec(found.clip.inPoint) : 0;
+    if (isNaN(clipInSrc)) clipInSrc = 0;
+    var atSec = clipInSrc + Math.max(0, phSec - clipStart);
+
+    return _ok({
+      path: srcPath,
+      atSec: atSec,
+      clipName: String(found.clip.name || pi.name),
+      kind: _itemKind(pi),
+      attempts: attempts,
+    });
+  } catch (e) { return _err('exception', String(e) + ' | ' + attempts.join(' | ')); }
+}
+
+// Возвращает source-relative in/out + путь к исходнику для клипа на ТАЙМЛАЙНЕ
+// под In/Out марками активной sequence. Если марок нет — fallback: целиком
+// клип под playhead'ом как он лежит на таймлайне (его in/out на исходнике).
+function getTimelineInOutSource() {
+  var attempts = [];
+  try {
+    var seq = app.project.activeSequence;
+    if (!seq) return _err('no_active_sequence');
+
+    var seqIn = NaN, seqOut = NaN;
+
+    // Стабильный DOM: seq.getInPoint/getOutPoint (могут вернуть строку timecode
+    // или TickTime). Доступно не на всех билдах.
+    try {
+      if (typeof seq.getInPoint === 'function') {
+        var ip = seq.getInPoint();
+        seqIn = _ptToSec(ip);
+        if (!isNaN(seqIn)) attempts.push('seq.getInPoint=' + seqIn);
+      }
+    } catch (e) { attempts.push('seq.getInPoint:' + String(e)); }
+    try {
+      if (typeof seq.getOutPoint === 'function') {
+        var op = seq.getOutPoint();
+        seqOut = _ptToSec(op);
+        if (!isNaN(seqOut)) attempts.push('seq.getOutPoint=' + seqOut);
+      }
+    } catch (e) { attempts.push('seq.getOutPoint:' + String(e)); }
+
+    // QE fallback — у qe.project.getActiveSequence() обычно тоже есть getInPoint.
+    if ((isNaN(seqIn) || isNaN(seqOut)) && _ensureQE()) {
+      try {
+        var qSeq = qe.project.getActiveSequence();
+        if (qSeq) {
+          if (isNaN(seqIn) && typeof qSeq.getInPoint === 'function') {
+            var qi = qSeq.getInPoint();
+            var qis = _ptToSec(qi);
+            if (!isNaN(qis)) { seqIn = qis; attempts.push('qe.seq.getInPoint=' + qis); }
+          }
+          if (isNaN(seqOut) && typeof qSeq.getOutPoint === 'function') {
+            var qo = qSeq.getOutPoint();
+            var qos = _ptToSec(qo);
+            if (!isNaN(qos)) { seqOut = qos; attempts.push('qe.seq.getOutPoint=' + qos); }
+          }
+        }
+      } catch (e) { attempts.push('qe.seq.io:' + String(e)); }
+    }
+
+    var hadMarks = !isNaN(seqIn) && !isNaN(seqOut) && seqOut > seqIn;
+    var pivotSec;
+    if (hadMarks) {
+      pivotSec = seqIn + 0.001;
+    } else {
+      var ph = seq.getPlayerPosition && seq.getPlayerPosition();
+      pivotSec = ph ? Number(ph.seconds) : 0;
+      attempts.push('no_marks:fallback_to_playhead=' + pivotSec);
+    }
+
+    var found = _findTopmostVideoClipAt(seq, pivotSec, attempts);
+    if (!found) return _err('no_clip_at_range', 'attempts=' + attempts.join(' | '));
+
+    var pi = found.clip.projectItem;
+    if (!pi) return _err('no_project_item');
+    var srcPath = String(pi.getMediaPath ? pi.getMediaPath() : '');
+    if (!srcPath) return _err('no_media_path');
+
+    var clipStart = Number(found.clip.start.seconds);
+    var clipEnd = Number(found.clip.end.seconds);
+    var clipInSrc = found.clip.inPoint ? _ptToSec(found.clip.inPoint) : 0;
+    if (isNaN(clipInSrc)) clipInSrc = 0;
+    var clipOutSrc;
+    if (found.clip.outPoint) {
+      clipOutSrc = _ptToSec(found.clip.outPoint);
+      if (isNaN(clipOutSrc)) clipOutSrc = clipInSrc + (clipEnd - clipStart);
+    } else {
+      clipOutSrc = clipInSrc + (clipEnd - clipStart);
+    }
+
+    var rangeIn, rangeOut;
+    if (hadMarks) {
+      var startInClipSeq = Math.max(seqIn, clipStart);
+      var endInClipSeq   = Math.min(seqOut, clipEnd);
+      if (endInClipSeq <= startInClipSeq) {
+        return _err('marks_outside_clip',
+          'seq=[' + seqIn + ',' + seqOut + '] clip=[' + clipStart + ',' + clipEnd + ']');
+      }
+      rangeIn  = clipInSrc + (startInClipSeq - clipStart);
+      rangeOut = clipInSrc + (endInClipSeq   - clipStart);
+    } else {
+      rangeIn  = clipInSrc;
+      rangeOut = clipOutSrc;
+    }
+
+    if (!(rangeOut > rangeIn)) {
+      return _err('invalid_range', 'in=' + rangeIn + ' out=' + rangeOut);
+    }
+
+    return _ok({
+      path: srcPath,
+      inSec: rangeIn,
+      outSec: rangeOut,
+      clipName: String(found.clip.name || pi.name),
+      kind: _itemKind(pi),
+      hadMarks: hadMarks,
+      seqIn: seqIn,
+      seqOut: seqOut,
+      attempts: attempts,
+    });
+  } catch (e) { return _err('exception', String(e) + ' | ' + attempts.join(' | ')); }
+}
+
+// QE time может прийти как объект {ticks: "..."}, "HH:MM:SS:FF" строка
+// или просто число секунд. Превращаем в секунды (NaN если не получилось).
+function _qeTimeToSec(t) {
+  if (t == null) return NaN;
+  if (typeof t === 'number') return t;
+  if (typeof t === 'object') {
+    if (typeof t.seconds === 'number') return t.seconds;
+    if (typeof t.ticks !== 'undefined') {
+      // 1 sec = 254016000000 ticks (Pr internal)
+      var ticks = Number(t.ticks);
+      if (!isNaN(ticks)) return ticks / 254016000000;
+    }
+  }
+  if (typeof t === 'string') {
+    // try "HH:MM:SS:FF" — без знания fps вернём NaN, иначе число
+    if (/^\d+(\.\d+)?$/.test(t)) return Number(t);
+  }
+  return NaN;
 }
 
 function _binByName(name) {
@@ -224,17 +735,143 @@ function _binByName(name) {
   return app.project.rootItem.createBin(name);
 }
 
+// Pr's native importFiles ломается на путях с non-ASCII (Cyrillic, иероглифы,
+// и т.п.) тем же образом что и QE DOM — выдаёт "Unsupported format or damaged
+// file" для валидного PNG/JPG/MP4, лежащего в C:\Users\<Кириллица>\... Файл
+// технически валиден (CEP-панель его рендерит), но Pr-импортёр на MBCS-слое
+// не открывает дескриптор.
+//
+// Решение: staging. Копируем в гарантированно ASCII-путь и импортим уже его.
+// Оригинал не трогаем — он остаётся для downloads history.
+function _asciiStageDir() {
+  var d = _isWin() ? 'C:\\ProgramData\\PhygitalStudio\\imports' : '/tmp/PhygitalStudio_imports';
+  try {
+    var f = new Folder(d);
+    if (!f.exists) f.create();
+    if (f.exists) return _nativePath(d);
+  } catch (e) {}
+  return null;
+}
+
+function _asciiStage(srcPath) {
+  if (!srcPath) return srcPath;
+  if (_isAscii(srcPath)) return srcPath;        // путь уже чистый — не трогаем
+  var stage = _asciiStageDir();
+  if (!stage) return srcPath;
+  try {
+    var ext = '';
+    var dot = srcPath.lastIndexOf('.');
+    if (dot >= 0 && dot > srcPath.length - 8) ext = srcPath.substring(dot);
+    var dest = _nativePath(stage + _nativeSep() + 'pi_' + (new Date().getTime()) + '_' + Math.floor(Math.random() * 1e6) + ext);
+    var srcF = new File(srcPath);
+    if (!srcF.exists) return srcPath;
+    if (srcF.copy(dest)) {
+      var df = new File(dest);
+      if (df.exists && df.length > 0) return dest;
+    }
+  } catch (e) {}
+  return srcPath;
+}
+
 function importToBin(path) {
   try {
     var bin = _binByName('PhygitalStudio');
     var before = bin.children.numItems;
-    app.project.importFiles([path], true, bin, false);
+    var staged = _asciiStage(path);
+    app.project.importFiles([staged], true, bin, false);
     if (bin.children.numItems > before) {
       var pi = bin.children[bin.children.numItems - 1];
-      return _ok({ projectItemId: String(pi.nodeId), binName: 'PhygitalStudio' });
+      return _ok({
+        projectItemId: String(pi.nodeId),
+        binName: 'PhygitalStudio',
+        staged: staged !== path ? staged : null,
+      });
     }
-    return _err('import_failed', 'no new item');
-  } catch (e) { return _err('import_failed', String(e)); }
+    return _err('import_failed', 'no new item; original=' + path + (staged !== path ? ' staged=' + staged : ''));
+  } catch (e) { return _err('import_failed', String(e) + ' | path=' + path); }
+}
+
+// Диагностика API: что реально доступно в этом билде Pr. Возвращаем большой
+// JSON с типами методов — клиент рендерит как preformatted текст в toast или
+// debug-overlay. Используется для расследования "X is not a function" ошибок.
+function diagApis() {
+  var info = {};
+  try { info.pr_version = String(app.version); } catch (e) { info.pr_version = 'unknown'; }
+  try { info.pr_build = String(app.build); } catch (e) {}
+
+  // ── activeSequence ──
+  try {
+    var s = app.project.activeSequence;
+    info.has_active_sequence = !!s;
+    if (s) {
+      info.seq_apis = {
+        exportFrameJPEG: typeof s.exportFrameJPEG,
+        exportFramePNG: typeof s.exportFramePNG,
+        exportFrameTIFF: typeof s.exportFrameTIFF,
+        getPlayerPosition: typeof s.getPlayerPosition,
+        getInPoint: typeof s.getInPoint,
+        getOutPoint: typeof s.getOutPoint,
+      };
+      info.seq_name = String(s.name);
+    }
+  } catch (e) { info.seq_err = String(e); }
+
+  // ── QE DOM ──
+  info.has_enableQE = typeof app.enableQE === 'function';
+  try {
+    var qeOK = _ensureQE();
+    info.qe_available = qeOK;
+    if (qeOK) {
+      try {
+        var qs = qe.project.getActiveSequence();
+        info.qe_seq = !!qs;
+        if (qs) info.qe_seq_apis = {
+          exportFrameJPEG: typeof qs.exportFrameJPEG,
+          exportFramePNG: typeof qs.exportFramePNG,
+          exportFrameTIFF: typeof qs.exportFrameTIFF,
+          exportFrameTarga: typeof qs.exportFrameTarga,
+          exportFrameDPX: typeof qs.exportFrameDPX,
+        };
+      } catch (e) { info.qe_seq_err = String(e); }
+      try {
+        var qsrc = qe.source;
+        info.qe_source = !!qsrc;
+        if (qsrc) info.qe_source_apis = {
+          getInPoint: typeof qsrc.getInPoint,
+          getOutPoint: typeof qsrc.getOutPoint,
+          getPosition: typeof qsrc.getPosition,
+        };
+      } catch (e) { info.qe_source_err = String(e); }
+    }
+  } catch (e) { info.qe_err = String(e); }
+
+  // ── Source Monitor ──
+  try {
+    var sm = app.sourceMonitor;
+    info.has_source_monitor = !!sm;
+    if (sm) {
+      info.sm_apis = {
+        getProjectItem: typeof sm.getProjectItem,
+        getPosition: typeof sm.getPosition,
+        openProjectItem: typeof sm.openProjectItem,
+      };
+      var pi = null;
+      try { pi = sm.getProjectItem(); } catch (e) {}
+      info.sm_has_clip = !!pi;
+      if (pi) {
+        info.sm_pi_apis = {
+          getInPoint: typeof pi.getInPoint,
+          getOutPoint: typeof pi.getOutPoint,
+          getDuration: typeof pi.getDuration,
+          getMediaPath: typeof pi.getMediaPath,
+          nodeId: typeof pi.nodeId,
+        };
+        try { info.sm_pi_name = String(pi.name); } catch (e) {}
+      }
+    }
+  } catch (e) { info.sm_err = String(e); }
+
+  return _ok(info);
 }
 
 // Pr has no first-class "reveal in bin" API. Best-effort:

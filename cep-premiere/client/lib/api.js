@@ -74,6 +74,12 @@ export function createApi({ fetch, baseUrl }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ source_path, in_sec, out_sec }),
       }),
+    extractFrame: ({ source_path, at_sec }) =>
+      request('/extract-frame', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ source_path, at_sec }),
+      }),
     _request: request,
   };
 }

@@ -20,6 +20,8 @@ export async function readFileAsBlob(path) {
   const mime =
     ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
     ext === 'png' ? 'image/png' :
+    ext === 'tif' || ext === 'tiff' ? 'image/tiff' :
+    ext === 'webp' ? 'image/webp' :
     ext === 'mp4' ? 'video/mp4' :
     ext === 'mov' ? 'video/quicktime' :
     ext === 'wav' || ext === 'mp3' ? `audio/${ext === 'mp3' ? 'mpeg' : 'wav'}` :

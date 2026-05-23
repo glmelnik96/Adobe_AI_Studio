@@ -31,10 +31,13 @@ export const host = {
   getBinSelection:        () => call('getBinSelection'),
   getTimelineSelection:   (playheadOnly = false) => call('getTimelineSelection', playheadOnly),
   getSourceMonitorItem:   () => call('getSourceMonitorItem'),
-  exportTimelineFrame:    () => call('exportTimelineFrame'),
-  getSourceInOut:         () => call('getSourceInOut'),
+  exportTimelineFrame:    () => call('exportTimelineFrame'),       // deprecated (QE broken on many builds)
+  getTimelineFrameSource: () => call('getTimelineFrameSource'),    // source-relative phead + media path
+  getTimelineInOutSource: () => call('getTimelineInOutSource'),    // source-relative seq In/Out + media path
+  getSourceInOut:         () => call('getSourceInOut'),            // Source Monitor In/Out (kept as legacy)
   importToBin:            (path) => call('importToBin', path),
   revealInBin:            (projectItemId) => call('revealInBin', projectItemId),
+  diagApis:               () => call('diagApis'),
 };
 
 // Promise queue: ExtendScript is single-threaded; serialize evalScript calls.

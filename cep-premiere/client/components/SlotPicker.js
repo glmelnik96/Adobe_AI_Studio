@@ -23,13 +23,16 @@ export function SlotPicker({ name, kind, value, onPick, onClear }) {
         <span class="slot-kind">(${videoSlot ? 'video' : 'image'} ${kind})</span>
       </div>
       <div class="slot-sources">
-        <button onClick=${() => onPick && onPick('disk')} disabled=${!canAddMore}>Browse...</button>
-        <button onClick=${() => onPick && onPick('bin')}>Bin</button>
-        <button onClick=${() => onPick && onPick('timeline')}>Timeline clip</button>
+        <button title=${videoSlot ? 'Browse video file (mp4/mov/mkv/…)' : 'Browse image file (jpg/png/tif/…)'}
+                onClick=${() => onPick && onPick('disk')} disabled=${!canAddMore}>Browse...</button>
+        <button title=${videoSlot ? 'Pick selected video from Project bin' : 'Pick selected image from Project bin'}
+                onClick=${() => onPick && onPick('bin')}>Bin</button>
+        <button title=${videoSlot ? 'Pick video clip at playhead from active sequence' : 'Pick image clip at playhead from active sequence'}
+                onClick=${() => onPick && onPick('timeline')}>Timeline clip</button>
         ${videoSlot
-          ? html`<button title="Use Source Monitor In/Out marks; ffmpeg clips the fragment locally"
-                          onClick=${() => onPick && onPick('source_io')}>Source In/Out</button>`
-          : html`<button title="Export current playhead frame from the active sequence"
+          ? html`<button title="Use Timeline In/Out marks on the active sequence; ffmpeg clips the topmost video clip locally"
+                          onClick=${() => onPick && onPick('timeline_io')}>Timeline In/Out</button>`
+          : html`<button title="Grab the still under the playhead from the topmost clip in the active sequence (via ffmpeg)"
                           onClick=${() => onPick && onPick('timeline_frame')}>Timeline frame</button>`}
       </div>
       ${items.length === 0
