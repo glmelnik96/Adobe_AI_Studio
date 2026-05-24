@@ -271,8 +271,13 @@ defaults delete com.adobe.CSXS.12 PlayerDebugMode
 
 ### Generate падает с «import failed»
 
-- Кириллица в пути: `disk.js stageToAscii` копирует в `/tmp/phygital-imports/`.
-  Проверить, что `/tmp` writable (обычно — да).
+- В V1.1 ASCII-staging убран — Pr на macOS ест UTF-8 пути напрямую. Если
+  всё-таки `importFiles` падает: открыть `~/Library/Logs/CSXS/csxs*.log` и
+  CEP DevTools (`http://localhost:8099`), искать ошибку от `host.jsx`
+  `importToBin`. Возможные причины: файл не дочитан с диска (sniff по magic
+  байтам не прошёл, см. `disk_save.js _sniffExt`) — проверить, что в
+  `~/Library/Application Support/PhygitalStudio/downloads-panel/` лежит
+  валидный PNG/JPEG/MP4.
 
 ### `From Timeline frame` молча ничего не делает
 

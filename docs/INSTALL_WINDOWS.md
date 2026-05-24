@@ -234,9 +234,14 @@ reg delete "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /f
 
 ### Generate падает с «import failed»
 
-- Файл в кириллическом пути → `disk.js stageToAscii` должен скопировать в
-  `C:\ProgramData\PhygitalStudio\imports\`. Проверить, что эта папка writable
-  (Pr запущен под обычным пользователем — должна быть OK).
+- В V1.1 ASCII-staging убран — Pr 2024.2+ ест кириллические UTF-8 пути
+  напрямую. Если всё-таки `importFiles` падает: открыть CEP DevTools
+  (`http://localhost:8099`), искать ошибку от `host.jsx` `importToBin`.
+  Возможные причины: байты с Phygital повредились / Content-Type соврал
+  (PNG-заголовок поверх JPEG-байт) — посмотреть, что лежит в
+  `%LOCALAPPDATA%\PhygitalStudio\downloads-panel\`. `disk_save.js _sniffExt`
+  должен переименовать расширение под реальные magic-байты — если файл
+  пришёл с расширением `.png`, а sniff не сработал, это баг sniff'а.
 
 ### `From Timeline frame` молча ничего не делает
 

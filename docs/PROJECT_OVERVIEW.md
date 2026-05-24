@@ -230,9 +230,8 @@ SlotPicker для каждого slot'а:
        AppData/PhygitalStudio/clips/<sha>.jpg|.mp4
         │
         ▼
-client/disk.js: stageToAscii(path)
-  ├─ если путь содержит Cyrillic → копировать в C:\ProgramData\PhygitalStudio\imports\<sha>.ext
-  └─ иначе вернуть путь как есть
+(V1.1: ASCII-staging убран — Pr 2024.2+ и AE 2024+ принимают UTF-8 пути
+напрямую через NSURL/Win32 wide API. Путь передаётся в sidecar как есть.)
         │
         ▼
 SubmitButton: POST /jobs {node_id:100, params:{prompt, scenario, ...},
@@ -486,10 +485,11 @@ PID-файл на диске для cross-reload state.
 ИЗ агента, пишет туда — CEP-панель его не видит. **Sidecar надо запускать
 руками или autostart'ом панели**, не из агентского терминала.
 
-**Cyrillic-пути ломают Pr import.** `ProjectItem.importFiles(['C:\\Users\\Глеб\\…'])`
-падает с MBCS-ошибкой. Решение — `disk.js stageToAscii()` копирует файл в
-`C:\ProgramData\PhygitalStudio\imports\<sha>.<ext>` (ASCII-only путь) перед
-импортом.
+**Cyrillic-пути и Pr import (исторический pitfall).** В Pr ≤ 2024.1 на Windows
+`ProjectItem.importFiles(['C:\\Users\\Глеб\\…'])` падал с MBCS-ошибкой и
+требовал ASCII-staging (`disk.js stageToAscii` → `C:\ProgramData\PhygitalStudio\imports\`).
+В V1.1 staging убран: Pr 2024.2+ (Win) и Pr 2024+ (Mac) ест UTF-8 пути
+напрямую. Если поддерживаем Pr ≤ 2024.1 — вернуть staging локально.
 
 **Дуальные CSXS-ключи.** Pr 2024 = CSXS.11, Pr 2025+ = CSXS.12. PlayerDebugMode
 выставлять для обоих.

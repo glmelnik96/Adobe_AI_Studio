@@ -790,9 +790,20 @@ function _binByName(name) {
 // Дополнительно: на части билдов Pr игнорирует bin-arg и кладёт импорт в
 // rootItem. Поэтому при отсутствии новинки в нашем бине идём по всему дереву
 // и ищем ProjectItem чей getMediaPath равен staged-пути.
+// Нормализуем путь для сравнения с getMediaPath().
+//   Windows: NTFS case-insensitive → toLowerCase + backslash separator.
+//   macOS/Linux: APFS/ext4 по умолчанию case-sensitive → только унифицируем
+//                separator, case оставляем как есть (иначе 'Photo.png' и
+//                'photo.png' схлопнутся, давая false-positive).
+function _normPathForCompare(p) {
+  if (!p) return '';
+  if (_isWin()) return String(p).toLowerCase().replace(/\//g, '\\');
+  return String(p).replace(/\\/g, '/');
+}
+
 function _findImportedByPath(targetPath) {
-  // Сравниваем case-insensitive по нормализованным separator'ам.
-  var needle = String(targetPath || '').toLowerCase().replace(/\//g, '\\');
+  var needle = _normPathForCompare(targetPath);
+  if (!needle) return null;
   var stack = [app.project.rootItem];
   while (stack.length) {
     var n = stack.pop();
@@ -800,7 +811,7 @@ function _findImportedByPath(targetPath) {
       var c = n.children[i];
       try {
         if (c.getMediaPath) {
-          var p = String(c.getMediaPath() || '').toLowerCase().replace(/\//g, '\\');
+          var p = _normPathForCompare(c.getMediaPath());
           if (p && p === needle) return { item: c, parent: n };
         }
       } catch (e) {}

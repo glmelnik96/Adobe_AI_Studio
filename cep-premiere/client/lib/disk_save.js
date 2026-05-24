@@ -1,5 +1,23 @@
-// Save a Blob to a stable disk path inside %LOCALAPPDATA%/PhygitalStudio/downloads-panel/.
+// Save a Blob to a stable disk path inside the platform-native app-data dir
+// under PhygitalStudio/downloads-panel/.
+//   Windows: %LOCALAPPDATA%\PhygitalStudio\downloads-panel\
+//   macOS:   ~/Library/Application Support/PhygitalStudio/downloads-panel/
+//   Linux:   $XDG_DATA_HOME (or ~/.local/share)/PhygitalStudio/downloads-panel/
+// Раньше fallback'ом на не-Windows платформах шёл os.tmpdir(), который macOS
+// периодически GC'шит (/var/folders/.../T) — превью теряются после reboot.
+// Папка совпадает с местом, куда sidecar пишет session.json / sidecar.token.
 // Requires Node-enabled CEF (manifest --enable-nodejs).
+function _appDataDir() {
+  const path = require('path');
+  const os = require('os');
+  if (process.platform === 'darwin') {
+    return path.join(os.homedir(), 'Library', 'Application Support');
+  }
+  if (process.platform === 'win32') {
+    return process.env.LOCALAPPDATA || path.join(os.homedir(), 'AppData', 'Local');
+  }
+  return process.env.XDG_DATA_HOME || path.join(os.homedir(), '.local', 'share');
+}
 
 // Phygital периодически возвращает blob с Content-Type='image/png', но
 // в байтах лежит JPEG (или наоборот). Если расширение файла не совпадает с
@@ -30,8 +48,7 @@ function _sniffExt(buf) {
 export async function saveBlobToDisk(blob, filename) {
   const fs = require('fs');
   const path = require('path');
-  const os = require('os');
-  const dir = path.join(process.env.LOCALAPPDATA || os.tmpdir(), 'PhygitalStudio', 'downloads-panel');
+  const dir = path.join(_appDataDir(), 'PhygitalStudio', 'downloads-panel');
   fs.mkdirSync(dir, { recursive: true });
   const buf = Buffer.from(await blob.arrayBuffer());
   // Override extension based on actual magic bytes. Content-Type от Phygital

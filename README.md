@@ -10,7 +10,8 @@ Flux, GPT Image и др.) прямо из интерфейса Adobe и авто
   V1.1: Idempotency-Key, `/v1/` versioning, cursor-pagination, HEAD на download.
 - Sub-project B (Pr-панель) — реализация завершена, **56 тестов**, проходит manual E2E.
   V1.1: persistent thumbnails, queue widget с per-job cancel, cost preview, auto-fill image slot.
-- Sub-project C (AE-панель) — не начато.
+- Sub-project C (AE-панель) — scaffold готов (`cep-ae/CSXS/manifest.xml` + stub
+  `client/panel.js` + `host/insert_media.jsx`), реализации UI/HTTP-клиента нет.
 - Sub-project D (видеоноды) — реализовано в sidecar, доступно через Pr-панель.
 
 Все изменения V1.1 — в [CHANGELOG.md](CHANGELOG.md).
@@ -25,6 +26,7 @@ Flux, GPT Image и др.) прямо из интерфейса Adobe и авто
 | [docs/INSTALL_MACOS.md](docs/INSTALL_MACOS.md) | Пошаговая установка на macOS + траблшут |
 | [docs/AUDIT.md](docs/AUDIT.md) | Исходный аудит: что переиспользуется, реалистичность, риски |
 | [docs/NEXT_AUDIT.md](docs/NEXT_AUDIT.md) | Открытые вопросы для следующего аудита (после V1.1) |
+| [docs/AUDIT_V1.1.md](docs/AUDIT_V1.1.md) | Комплексный аудит после V1.1: internal + external, топ-10 приоритетов V1.2 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Sidecar + CEP, потоки данных, контракты HTTP |
 | [docs/AUTH.md](docs/AUTH.md) | Бутстрап Phygital-сессии через Playwright recon |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | План работ по фазам |
@@ -59,7 +61,8 @@ docs/           аудит, архитектура, auth, roadmap, handoff
 
 - **Premiere Pro panel** → [`cep-premiere/README.md`](cep-premiere/README.md) —
   prerequisites для Windows и macOS, autostart-схема, manual E2E чек-лист.
-- **After Effects panel** → `cep-ae/README.md` (будет добавлен в sub-project C).
+- **After Effects panel** → [`cep-ae/README.md`](cep-ae/README.md) — scaffold
+  (CSXS-манифест + dev-install для Win/Mac); полная панель — в sub-project C.
 
 Контракт между sidecar и панелями — `http://127.0.0.1:8765`, идентичный
 на обеих платформах. Один путь session.json:
