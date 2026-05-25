@@ -2,6 +2,7 @@ import { html } from '../lib/html.js';
 import { useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import { makeCostKey } from '../lib/state.js';
 import { validateDraft } from '../lib/validation.js';
+import { getNodeMeta } from '../lib/slot_schema.js';
 
 const DEBOUNCE_MS = 600;
 
@@ -27,9 +28,14 @@ export function CostBar({ snap, api, store }) {
       inFlight.current = key;
       store.set({ cost: { key, price: null, loading: true, error: null } });
       try {
+        // Мержим defaults: cost preview должен считать ровно ту цену,
+        // которая будет на submit (см. SubmitButton). Иначе пилл показывает
+        // стейл-цену когда юзер не тронул дропдаун.
+        const meta = getNodeMeta({ videoNodes, nodeId: draft.model_id });
+        const defaults = (meta && meta.default_params) || {};
         const out = await api.previewCost({
           node_id: draft.model_id,
-          params: { ...draft.params, prompt: draft.prompt },
+          params: { ...defaults, ...draft.params, prompt: draft.prompt },
         });
         if (inFlight.current !== key) return;  // a newer draft superseded us
         store.set({ cost: { key, price: out.price ?? out.credits ?? null, loading: false, error: null } });

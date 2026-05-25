@@ -61,8 +61,27 @@ class ImageGenWorkflow(Workflow):
         self._last_price: dict[str, Any] | None = None
 
     # ── Payload для POST /api/v2/tasks/ ───────────────────────────────────
-    def build_payload(self, *, prompt: str, init_img: list[Any] | None = None, **_extra: Any) -> dict[str, Any]:
+    def build_payload(
+        self,
+        *,
+        prompt: str,
+        init_img: list[Any] | None = None,
+        model_name: str | None = None,
+        ratio: str | None = None,
+        resolution: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        # JobRunner создаёт workflow через `workflow_class(client)` без kwargs,
+        # а UI-параметры приходят в `run(**params)` → сюда. Без перезаписи self.X
+        # _params_list() и _build_config() слали бы init-defaults независимо
+        # от выбора в панели (silent param drop).
         self._last_prompt = prompt
+        if model_name is not None:
+            self.model_name = model_name
+        if ratio is not None:
+            self.ratio = ratio
+        if resolution is not None:
+            self.resolution = resolution
         return {
             "id": WORKFLOW_SCHEMA_ID,
             "inputs": [

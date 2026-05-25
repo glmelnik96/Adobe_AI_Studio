@@ -37,7 +37,7 @@ class KlingOmniWorkflow(VideoWorkflow):
         ratio: str = "r_16_9",
         model: str = "omni_3",
         mode: str = "pro",
-        duration: int = 3,
+        duration: int = 5,  # совпадает с NODE_DEFAULT_PARAMS[121] и UI-дефолтом
         sound: bool = False,
         element_1_name: str | None = None,
         element_2_name: str | None = None,

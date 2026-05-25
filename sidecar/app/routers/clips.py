@@ -216,18 +216,17 @@ async def extract_frame(req: ExtractFrameRequest) -> dict:
         })
 
     paths.asset_uploads_dir().mkdir(parents=True, exist_ok=True)
-    out_path = paths.asset_uploads_dir() / f"frame_{uuid.uuid4().hex}.jpg"
+    out_path = paths.asset_uploads_dir() / f"frame_{uuid.uuid4().hex}.png"
 
     # -ss ПЕРЕД -i = fast seek по keyframes, потом точная декодировка одного
-    # кадра. -frames:v 1 = ровно один кадр. -q:v 2 = JPEG visually-lossless.
-    # -protocol_whitelist — см. clip_video.
+    # кадра. -frames:v 1 = ровно один кадр. PNG (lossless) — формат по выбору
+    # пользователя для img2img-шага. -protocol_whitelist — см. clip_video.
     cmd = [
         ffmpeg, "-y",
         "-protocol_whitelist", "file,crypto,data",
         "-ss", f"{float(req.at_sec):.3f}",
         "-i", str(src),
         "-frames:v", "1",
-        "-q:v", "2",
         str(out_path),
     ]
     proc = await asyncio.create_subprocess_exec(

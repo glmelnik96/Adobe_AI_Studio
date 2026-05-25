@@ -4,6 +4,7 @@ import { validateDraft } from '../lib/validation.js';
 import { makeCostKey } from '../lib/state.js';
 import { slotLabel } from '../lib/slot_labels.js';
 import { toast } from '../lib/toast.js';
+import { getNodeMeta } from '../lib/slot_schema.js';
 
 // Turn validation errors into one-line user hints. Same field codes the
 // validation lib emits, but with friendly slot/scenario names baked in.
@@ -52,7 +53,14 @@ export function SubmitButton({ snap, api, onSubmitted }) {
         if (Array.isArray(val)) init_files[name] = val.map(x => x.path);
         else if (val) init_files[name] = val.path;
       }
-      const params = { ...draft.params, prompt: draft.prompt, scenario: draft.scenario };
+      // Мержим defaults из meta перед отправкой. Без этого, если юзер не
+      // тронул дропдаун, key отсутствует в draft.params → бэк падает на
+      // свой Python-default (который мог разойтись с тем, что показано в
+      // UI — напр. seed=-1 в video_common vs 0 в build_payload signature).
+      // Это симптом «aspect_ratio не передавался» на Mac после reload.
+      const meta = getNodeMeta({ videoNodes, nodeId: draft.model_id });
+      const defaults = (meta && meta.default_params) || {};
+      const params = { ...defaults, ...draft.params, prompt: draft.prompt, scenario: draft.scenario };
       const out = await api.createJob({ node_id: draft.model_id, params, init_files });
       if (onSubmitted) onSubmitted(out.job_id);
     } catch (e) {

@@ -162,10 +162,13 @@ def test_seedance_payload_has_correct_schema_id():
 def test_omni_elements_prompt_matches_fixture_06():
     fixture = _load("submit_06_schema121_task7083624.json")
     wf = KlingOmniWorkflow(client=None)
+    # duration=3 — фикстура старого recon; build_payload-дефолт теперь 5 (см.
+    # NODE_DEFAULT_PARAMS[121]), так что явно передаём чтобы матчить fixture.
     actual = wf.build_payload(
         prompt="test",
         scenario=VideoScenario.ELEMENTS_PROMPT,
         element_1=[15380008, 15380010, 15380016],
+        duration=3,
     )
     assert _strip_meta(actual) == _strip_meta(fixture)
 
@@ -178,6 +181,7 @@ def test_omni_elements_prompt_video_matches_fixture_09():
         scenario=VideoScenario.ELEMENTS_PROMPT_VIDEO,
         element_1=[15380020, 15380020, 15380020],
         video=15380272,
+        duration=3,
     )
     assert _strip_meta(actual) == _strip_meta(fixture)
 

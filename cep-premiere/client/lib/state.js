@@ -77,7 +77,10 @@ export function createDraftActions(store) {
     setModel(model_id, { videoNodes }) {
       const meta = getNodeMeta({ videoNodes, nodeId: model_id });
       const scenario = meta ? meta.scenarios[0] : null;
-      setDraft({ model_id, scenario, slots: {} });
+      // Чистим params: у каждой ноды свой набор ключей; иначе aspect_ratio
+      // от Seedance леется в Kling (где такого парама нет) и бэк его
+      // тихо игнорирует, а на cost-preview видит «неизвестный ключ».
+      setDraft({ model_id, scenario, slots: {}, params: {} });
     },
     setScenario(scenario, { videoNodes }) {
       const draft = store.get().draft;
@@ -88,6 +91,8 @@ export function createDraftActions(store) {
       for (const [k, v] of Object.entries(draft.slots)) {
         if (allowed.has(k)) slots[k] = v;
       }
+      // params оставляем как есть: сценарии у одной ноды делят param-схему
+      // (model_name/ratio/duration не зависят от scenario для 74/100/121).
       setDraft({ scenario, slots });
     },
     setPrompt(prompt) { setDraft({ prompt }); },

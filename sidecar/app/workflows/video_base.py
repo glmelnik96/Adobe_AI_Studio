@@ -67,7 +67,7 @@ class VideoWorkflow(Workflow):
     async def wait(
         self,
         job_id: str,
-        timeout: float = 600.0,
+        timeout: float = 1800.0,
         poll_interval: float = 1.5,
     ) -> GenerationJob:
         task_id = int(job_id)

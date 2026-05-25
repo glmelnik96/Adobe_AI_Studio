@@ -68,12 +68,11 @@ def test_build_config_patches_task_schema_init_img():
     assert init_img["meta"]["dimensions"] == [{"height": 768, "width": 1024}]
 
 
-def test_defaults_match_bot_pro_3_1_preset():
-    """Default params для img2img — v3_1 / r_3_4 / k2 (Nano Banana Pro 3.1).
-
-    Это другие дефолты, чем у text-to-image (v3 / default / k2). Важно, чтобы
-    UI и тесты могли полагаться на этот пресет."""
+def test_defaults_align_with_ui_meta():
+    """img2img defaults должны совпадать с NANO_BANANA_META.default_params
+    в slot_schema.js: v3_1 / default / k1. Раньше img2img ставил r_3_4/k2 —
+    это создавало силенс-несоответствие UI vs back."""
     wf = ImageToImageWorkflow(client=MagicMock())
     assert wf.model_name == "v3_1"
-    assert wf.ratio == "r_3_4"
-    assert wf.resolution == "k2"
+    assert wf.ratio == "default"
+    assert wf.resolution == "k1"

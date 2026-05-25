@@ -191,6 +191,15 @@ function _isWin() {
   try { return ($.os || '').toLowerCase().indexOf('windows') >= 0; } catch (e) { return true; }
 }
 
+// $.os на Mac обычно "Macintosh OS" / "Mac OS X". Linux — "Linux". Если
+// детект не сработал, считаем что НЕ Mac (false-safe для linux ext4).
+function _isMac() {
+  try {
+    var o = ($.os || '').toLowerCase();
+    return o.indexOf('mac') >= 0 || o.indexOf('darwin') >= 0;
+  } catch (e) { return false; }
+}
+
 function _nativeSep() { return _isWin() ? '\\' : '/'; }
 
 // Нормализуем path → native separators. QE на Windows требует backslashes.
@@ -792,12 +801,19 @@ function _binByName(name) {
 // и ищем ProjectItem чей getMediaPath равен staged-пути.
 // Нормализуем путь для сравнения с getMediaPath().
 //   Windows: NTFS case-insensitive → toLowerCase + backslash separator.
-//   macOS/Linux: APFS/ext4 по умолчанию case-sensitive → только унифицируем
-//                separator, case оставляем как есть (иначе 'Photo.png' и
-//                'photo.png' схлопнутся, давая false-positive).
+//   macOS: APFS по умолчанию case-INsensitive (noncasefolding API даёт
+//          case-preserving поведение, но сравнение должно игнорировать
+//          регистр — иначе при разном casing'е, который Pr приводит
+//          непредсказуемо, _findImportedByPath даёт false-negative и
+//          выпадает в "import_failed: no new item after 8s poll").
+//          На редких case-sensitive APFS-volumes конфликт по case-only
+//          именам (Photo.png vs photo.png) даст false-positive, но это
+//          гораздо реже, чем дефолтный setup.
+//   Linux: ext4 case-sensitive — оставляем как есть (separator only).
 function _normPathForCompare(p) {
   if (!p) return '';
   if (_isWin()) return String(p).toLowerCase().replace(/\//g, '\\');
+  if (_isMac()) return String(p).toLowerCase().replace(/\\/g, '/');
   return String(p).replace(/\\/g, '/');
 }
 

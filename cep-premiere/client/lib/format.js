@@ -7,8 +7,17 @@ export function fmtDuration(ms) {
   return `${m}m ${ss.toString().padStart(2, '0')}s`;
 }
 
+// For terminal jobs use updated_at so the elapsed counter freezes when the job
+// finishes. Without this, App.js's 2s poll keeps re-rendering JobCard with an
+// ever-increasing "age" even on completed/failed/canceled jobs.
+const TERMINAL_STATUSES = new Set(['completed', 'failed', 'canceled', 'cancelled']);
+
 export function jobAgeMs(job, now = Date.now()) {
-  const t = Date.parse(job.created_at);
-  if (isNaN(t)) return 0;
-  return now - t;
+  const start = Date.parse(job.created_at);
+  if (isNaN(start)) return 0;
+  if (TERMINAL_STATUSES.has(job.status)) {
+    const end = Date.parse(job.updated_at);
+    if (!isNaN(end)) return Math.max(0, end - start);
+  }
+  return now - start;
 }

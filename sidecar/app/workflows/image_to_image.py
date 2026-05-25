@@ -34,20 +34,20 @@ except ImportError:  # без HEIC всё ещё работаем на jpg/png/w
 from app.phygital_client.api import PhygitalClient
 from app.workflows.image_gen import ImageGenWorkflow, WORKFLOW_SCHEMA_ID
 
-# Phygital UI ресайзит большие входные картинки до ~2048 по длинной стороне
-# и пересохраняет в jpeg перед заливкой. Имитируем это, иначе сервер обрывает
-# крупные multipart-аплоады (ReadError на 30+МБ).
+# Phygital UI ресайзит большие входные картинки до ~2048 по длинной стороне.
+# Заливаем в PNG (lossless, сохраняет альфу) — пользователь явно попросил
+# не терять качество на img2img-шаге. Recon подтверждает, что Phygital+
+# принимает PNG (download links на CDN отдают image/png).
 MAX_DIM = 2048
-JPEG_QUALITY = 90
 
 
 def _prepare_for_upload(path: Path) -> tuple[Path, dict[str, int], bool]:
     """Нормализация любой картинки под Phygital upload:
-      - HEIC/HEIF, CMYK, P-палетные PNG, RGBA → конвертируем в RGB JPEG
+      - HEIC/HEIF, CMYK, P-палетные PNG → конвертируем в RGB/RGBA PNG
+      - RGBA/LA сохраняем как есть (PNG умеет alpha, в отличие от прошлой JPEG-схемы)
       - EXIF Orientation учитываем (иначе портретные фото с телефона уходят на бок)
       - ресайз до MAX_DIM по длинной стороне
-    Всегда пересохраняем во временный jpeg, кроме случая когда уже jpeg/RGB ≤MAX_DIM
-    и без EXIF-rotation — тогда отдаём оригинал как есть.
+    Если файл уже PNG, мал и не требует EXIF-поворота — отдаём оригинал.
 
     Возвращает (effective_path, dimensions, was_normalized).
     """
@@ -55,12 +55,12 @@ def _prepare_for_upload(path: Path) -> tuple[Path, dict[str, int], bool]:
         im = ImageOps.exif_transpose(im)  # применяет orientation и убирает тег
         w, h = im.size
         ext = path.suffix.lower()
-        is_jpeg_already = ext in {".jpg", ".jpeg"} and im.mode == "RGB"
+        is_png_already = ext == ".png" and im.mode in {"RGB", "RGBA", "L", "LA"}
         too_big = max(w, h) > MAX_DIM or path.stat().st_size > 6 * 1024 * 1024
 
-        # Если уже подходящий JPEG/RGB, малого размера и orientation был тривиальный —
-        # отдаём оригинал. Иначе — пересохраняем.
-        if is_jpeg_already and not too_big and im.size == (w, h):
+        # Если уже подходящий PNG, малого размера и orientation был тривиальный —
+        # отдаём оригинал. Иначе — пересохраняем в PNG.
+        if is_png_already and not too_big and im.size == (w, h):
             return path, {"height": h, "width": w}, False
 
         # ресайз при необходимости
@@ -71,19 +71,22 @@ def _prepare_for_upload(path: Path) -> tuple[Path, dict[str, int], bool]:
         else:
             new_w, new_h = w, h
 
-        # цветовое пространство → RGB (jpeg не умеет alpha/CMYK/P)
-        if im.mode != "RGB":
-            if im.mode in ("RGBA", "LA", "P"):
-                bg = Image.new("RGB", im.size, (255, 255, 255))
-                im_rgba = im.convert("RGBA") if im.mode != "RGBA" else im
-                bg.paste(im_rgba, mask=im_rgba.split()[-1])
-                im = bg
-            else:
+        # PNG умеет RGB, RGBA, L, LA; для остальных режимов конвертируем.
+        # CMYK / P-палетные / 16-бит → RGB(A). Альфу сохраняем где была.
+        if im.mode not in {"RGB", "RGBA", "L", "LA"}:
+            if im.mode in {"P", "PA"}:
+                # palette может содержать прозрачность — конвертим в RGBA
+                im = im.convert("RGBA")
+            elif im.mode == "CMYK":
                 im = im.convert("RGB")
+            else:
+                im = im.convert("RGBA" if "A" in im.mode else "RGB")
 
         buf = io.BytesIO()
-        im.save(buf, format="JPEG", quality=JPEG_QUALITY, optimize=True)
-        tmp = Path(tempfile.mkstemp(suffix=".jpg", prefix=f"{path.stem}_norm_")[1])
+        # optimize=True даёт меньший файл за счёт CPU; для 2048x2048 PNG —
+        # типично 2-5 MB, что в рамках Phygital-лимитов (см. 6MB threshold).
+        im.save(buf, format="PNG", optimize=True)
+        tmp = Path(tempfile.mkstemp(suffix=".png", prefix=f"{path.stem}_norm_")[1])
         tmp.write_bytes(buf.getvalue())
         return tmp, {"height": new_h, "width": new_w}, True
 
@@ -100,9 +103,14 @@ class ImageToImageWorkflow(ImageGenWorkflow):
         client: PhygitalClient,
         *,
         model_name: str = "v3_1",
-        ratio: str = "r_3_4",
-        resolution: str = "k2",
+        ratio: str = "default",
+        resolution: str = "k1",
     ) -> None:
+        # Defaults align с NANO_BANANA_META.default_params в UI
+        # (slot_schema.js: model_name=v3_1, ratio=default, resolution=k1).
+        # Раньше img2img переопределял ratio=r_3_4/resolution=k2 — UI показывал
+        # один пресет, бэк слал другой, если SubmitButton почему-либо не успел
+        # подмержить дефолты.
         super().__init__(
             client,
             model_name=model_name,
@@ -114,8 +122,25 @@ class ImageToImageWorkflow(ImageGenWorkflow):
         self._init_img_dims: list[dict[str, int]] = []
 
     # ── payload (override) ────────────────────────────────────────────────
-    def build_payload(self, *, prompt: str, init_img: list[Any] | None = None, **_extra: Any) -> dict[str, Any]:
+    def build_payload(
+        self,
+        *,
+        prompt: str,
+        init_img: list[Any] | None = None,
+        model_name: str | None = None,
+        ratio: str | None = None,
+        resolution: str | None = None,
+        **_extra: Any,
+    ) -> dict[str, Any]:
+        # См. ImageGenWorkflow.build_payload: kwargs из UI должны попасть в
+        # self.X, иначе _params_list() / _build_config() пошлют init-defaults.
         self._last_prompt = prompt
+        if model_name is not None:
+            self.model_name = model_name
+        if ratio is not None:
+            self.ratio = ratio
+        if resolution is not None:
+            self.resolution = resolution
         # init_img-аргумент игнорируем: значения берём из state, заполненного upload-шагом.
         return {
             "id": WORKFLOW_SCHEMA_ID,
@@ -162,7 +187,7 @@ class ImageToImageWorkflow(ImageGenWorkflow):
             if normalized:
                 logger.info(
                     f"normalized {pp.name} → {dim['width']}x{dim['height']} "
-                    f"({effective.stat().st_size/1024:.0f}KB jpeg)"
+                    f"({effective.stat().st_size/1024:.0f}KB png)"
                 )
             try:
                 fid = await self.client.upload_file(effective)

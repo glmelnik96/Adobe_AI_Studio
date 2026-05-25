@@ -36,7 +36,7 @@ class SeedanceWorkflow(VideoWorkflow):
         aspect_ratio: str = "adaptive",
         resolution: str = "p720",
         duration: int = 5,
-        seed: int = 0,
+        seed: int = -1,  # совпадает с NODE_DEFAULT_PARAMS[100] (random)
         camerafixed: bool = False,
         generate_audio: bool = False,
         **_extra: Any,
