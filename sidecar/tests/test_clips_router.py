@@ -89,6 +89,31 @@ def test_extract_frame_rejects_protocol_prefix(client, evil_path):
     assert r.status_code == 400
 
 
+def test_mac_hfs_path_not_treated_as_protocol(client, tmp_path):
+    """Mac HFS-form "Macintosh HD:Users:gleb:video.mov" — НЕ должно
+    быть protocol_prefix_not_allowed. Раньше любой ':' в первом сегменте
+    отбрасывался, ломая bin/timeline пик на части Mac-билдов Pr."""
+    # На Win этот путь не существует, упадёт на source_not_found —
+    # но не на protocol-check'е.
+    r = client.post("/clip-video", json={
+        "source_path": "Macintosh HD:Users:gleb:video.mov",
+        "in_sec": 0, "out_sec": 1,
+    })
+    assert r.status_code == 400
+    detail = r.json().get("detail", {})
+    assert detail.get("reason") != "protocol_prefix_not_allowed", detail
+
+
+def test_volume_with_space_not_treated_as_protocol(client):
+    """External-volume HFS форма "External Drive:movies:clip.mp4"."""
+    r = client.post("/clip-video", json={
+        "source_path": "External Drive:movies:clip.mp4",
+        "in_sec": 0, "out_sec": 1,
+    })
+    detail = r.json().get("detail", {})
+    assert detail.get("reason") != "protocol_prefix_not_allowed", detail
+
+
 def test_windows_drive_letter_not_treated_as_protocol(client, tmp_path):
     """C:\\Users\\... — НЕ должно быть protocol_prefix_not_allowed."""
     f = tmp_path / "video.mp4"

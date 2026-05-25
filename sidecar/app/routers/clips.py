@@ -28,7 +28,9 @@ ffmpeg должен быть в PATH (см. cep-premiere/README.md → Prerequis
 from __future__ import annotations
 
 import asyncio
+import os
 import shutil
+import sys
 import uuid
 from pathlib import Path
 
@@ -39,6 +41,29 @@ from pydantic import BaseModel
 from app import paths
 
 router = APIRouter()
+
+
+# Mac-only fallback locations. LaunchAgent на Mac запускает sidecar с
+# минимальным PATH (~/Library/LaunchAgents/*.plist не наследует shell-env),
+# поэтому Homebrew-установленный ffmpeg в /opt/homebrew/bin или
+# /usr/local/bin не виден через shutil.which("ffmpeg"). Проверяем явно.
+_MAC_FFMPEG_FALLBACKS = (
+    "/opt/homebrew/bin/ffmpeg",   # Apple Silicon Homebrew
+    "/usr/local/bin/ffmpeg",      # Intel Homebrew / MacPorts
+    "/usr/bin/ffmpeg",            # system (редко)
+)
+
+
+def _resolve_ffmpeg() -> str | None:
+    """shutil.which с Mac-fallback'ом для случая LaunchAgent-минимального PATH."""
+    found = shutil.which("ffmpeg")
+    if found:
+        return found
+    if sys.platform == "darwin":
+        for cand in _MAC_FFMPEG_FALLBACKS:
+            if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+    return None
 
 
 # Whitelist суффиксов, которые имеет смысл скармливать ffmpeg как input
@@ -62,22 +87,26 @@ def _validate_media_source(source_path: str) -> Path:
         raise HTTPException(400, detail={"error": "bad_source_path", "reason": "empty"})
 
     # ffmpeg protocol-prefix: "concat:", "subfile:", "crypto:", "tcp:" и т.п.
-    # Признак — двоеточие до любого слеша/бекслеша. На Windows нормальные пути
-    # выглядят как "C:\..." — двоеточие на ПОЗИЦИИ 1, после буквы диска. Поэтому
-    # запрещаем двоеточие в первом сегменте ТОЛЬКО если оно не выглядит как
-    # drive-letter (single ascii letter + ':' в начале).
+    # Раньше отбрасывали ЛЮБОЕ двоеточие в первом сегменте (кроме Win-drive) —
+    # ломалось на Mac HFS-форме `Macintosh HD:Users:gleb:video.mov`, которую
+    # Pr на части билдов возвращает из getMediaPath() (особенно при включённом
+    # AppleScript bridge / на старых проектах). Теперь whitelist'им только
+    # известные ffmpeg-протоколы — defence-in-depth остаётся через
+    # `-protocol_whitelist file,crypto,data` ниже.
+    _FFMPEG_PROTOCOLS = {
+        "concat", "subfile", "crypto", "tcp", "udp", "hls",
+        "pipe", "http", "https", "rtmp", "rtsp", "ftp", "ftps",
+        "srt", "sftp", "rtp", "data", "async", "cache",
+    }
     head_before_sep = source_path.split("/", 1)[0].split("\\", 1)[0]
-    is_win_drive = (
-        len(head_before_sep) == 2
-        and head_before_sep[1] == ":"
-        and head_before_sep[0].isascii()
-        and head_before_sep[0].isalpha()
-    )
-    if ":" in head_before_sep and not is_win_drive:
-        raise HTTPException(400, detail={
-            "error": "bad_source_path",
-            "reason": "protocol_prefix_not_allowed",
-        })
+    if ":" in head_before_sep:
+        proto_candidate = head_before_sep.split(":", 1)[0].lower()
+        if proto_candidate in _FFMPEG_PROTOCOLS:
+            raise HTTPException(400, detail={
+                "error": "bad_source_path",
+                "reason": "protocol_prefix_not_allowed",
+                "protocol": proto_candidate,
+            })
 
     p = Path(source_path)
     try:
@@ -139,11 +168,13 @@ async def clip_video(req: ClipVideoRequest) -> dict:
         raise HTTPException(400, detail={"error": "invalid_range",
                                          "in_sec": req.in_sec, "out_sec": req.out_sec})
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _resolve_ffmpeg()
     if not ffmpeg:
         raise HTTPException(500, detail={
             "error": "ffmpeg_missing",
-            "hint": "Install ffmpeg and ensure it is on PATH (see cep-premiere/README.md).",
+            "hint": "Install ffmpeg and ensure it is on PATH. "
+                    "On Mac: `brew install ffmpeg`. "
+                    "See cep-premiere/README.md.",
         })
 
     paths.asset_uploads_dir().mkdir(parents=True, exist_ok=True)
@@ -208,11 +239,13 @@ async def extract_frame(req: ExtractFrameRequest) -> dict:
     if req.at_sec < 0:
         raise HTTPException(400, detail={"error": "invalid_time", "at_sec": req.at_sec})
 
-    ffmpeg = shutil.which("ffmpeg")
+    ffmpeg = _resolve_ffmpeg()
     if not ffmpeg:
         raise HTTPException(500, detail={
             "error": "ffmpeg_missing",
-            "hint": "Install ffmpeg and ensure it is on PATH (see cep-premiere/README.md).",
+            "hint": "Install ffmpeg and ensure it is on PATH. "
+                    "On Mac: `brew install ffmpeg`. "
+                    "See cep-premiere/README.md.",
         })
 
     paths.asset_uploads_dir().mkdir(parents=True, exist_ok=True)

@@ -109,7 +109,7 @@ function getBinSelection() {
       if (['video','image','audio'].indexOf(kind) < 0) continue;
       items.push({
         projectItemId: String(pi.nodeId),
-        path: String(pi.getMediaPath()),
+        path: _mediaPath(pi),
         name: String(pi.name),
         kind: kind,
       });
@@ -142,7 +142,7 @@ function getTimelineSelection(playheadOnly) {
       if (kind === 'unknown') return false;
       items.push({
         projectItemId: String(pi.nodeId),
-        path: String(pi.getMediaPath ? pi.getMediaPath() : ''),
+        path: _mediaPath(pi),
         name: String(clip.name),
         kind: kind,
         in_sec: inSec,
@@ -175,7 +175,7 @@ function getSourceMonitorItem() {
     var pi = proj;
     return _ok({ item: {
       projectItemId: String(pi.nodeId),
-      path: String(pi.getMediaPath()),
+      path: _mediaPath(pi),
       name: String(pi.name),
       kind: _itemKind(pi),
     }});
@@ -207,6 +207,44 @@ function _nativePath(p) {
   if (!p) return p;
   if (_isWin()) return String(p).replace(/\//g, '\\');
   return String(p).replace(/\\/g, '/');
+}
+
+// На Mac часть билдов Pr (особенно при включённом AppleScript bridge или
+// старых проектах) возвращает HFS-форму "Macintosh HD:Users:gleb:file.mov"
+// вместо POSIX "/Users/gleb/file.mov". Node fs / sidecar этот формат не
+// понимают. Используем ExtendScript File API — у File есть .fsName,
+// который на Mac ВСЕГДА POSIX (валидно и для HFS-input, и для POSIX-input).
+// Если File не существует — fallback ручное преобразование (HFS → /Volumes/X/...).
+function _macToPosix(p) {
+  if (!p || !_isMac()) return p;
+  var s = String(p);
+  // Уже POSIX (начинается с / и нет двоеточий в первом сегменте) — возвращаем.
+  var firstSeg = s.split('/')[0];
+  if (s.charAt(0) === '/' && firstSeg.indexOf(':') < 0) return s;
+  // Пробуем File.fsName — самый надёжный путь.
+  try {
+    var f = new File(s);
+    if (f && f.fsName) return String(f.fsName);
+  } catch (e) {}
+  // Fallback ручной HFS→POSIX. "Macintosh HD:Users:..." → "/Users/..."
+  // на загрузочном томе; иначе "/Volumes/<vol>/...".
+  if (s.indexOf(':') >= 0) {
+    var parts = s.split(':');
+    var vol = parts.shift();
+    var rest = parts.join('/');
+    if (/^Macintosh HD$/i.test(vol)) return '/' + rest;
+    return '/Volumes/' + vol + (rest ? '/' + rest : '');
+  }
+  return s;
+}
+
+// Безопасно дергаем pi.getMediaPath() и нормализуем HFS→POSIX на Mac.
+// Возвращает строку (возможно пустую) — никогда не undefined.
+function _mediaPath(pi) {
+  try {
+    var raw = pi && pi.getMediaPath ? String(pi.getMediaPath()) : '';
+    return _macToPosix(raw);
+  } catch (e) { return ''; }
 }
 
 function _isAscii(s) { return !/[^\x00-\x7F]/.test(String(s || '')); }
@@ -543,7 +581,7 @@ function getSourceInOut() {
 
     return _ok({
       projectItemId: String(pi.nodeId),
-      path: String(pi.getMediaPath ? pi.getMediaPath() : ''),
+      path: _mediaPath(pi),
       name: String(pi.name),
       kind: _itemKind(pi),
       inSec: inSec,
@@ -625,7 +663,7 @@ function getTimelineFrameSource() {
 
     var pi = found.clip.projectItem;
     if (!pi) return _err('no_project_item');
-    var srcPath = String(pi.getMediaPath ? pi.getMediaPath() : '');
+    var srcPath = _mediaPath(pi);
     if (!srcPath) return _err('no_media_path');
 
     var clipStart = Number(found.clip.start.seconds);
@@ -705,7 +743,7 @@ function getTimelineInOutSource() {
 
     var pi = found.clip.projectItem;
     if (!pi) return _err('no_project_item');
-    var srcPath = String(pi.getMediaPath ? pi.getMediaPath() : '');
+    var srcPath = _mediaPath(pi);
     if (!srcPath) return _err('no_media_path');
 
     var clipStart = Number(found.clip.start.seconds);

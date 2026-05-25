@@ -15,15 +15,40 @@ export function pickFilesFromDisk({ multi, accept }) {
 export async function readFileAsBlob(path) {
   // Use Node fs via the CEP node-enabled context.
   const fs = require('fs');
-  const buf = fs.readFileSync(path);
+  // Pre-flight stat: даёт явный {code, path} вместо generic readFileSync
+  // throw без контекста. На Mac частые причины ENOENT — HFS-форма пути от
+  // Pr (см. host.jsx _macToPosix), NFD/NFC mismatch для Cyrillic-имён,
+  // sandbox-restricted папки (~/Library/...).
+  let stat;
+  try {
+    stat = fs.statSync(path);
+  } catch (e) {
+    const code = (e && e.code) || 'unknown';
+    const len = String(path || '').length;
+    throw new Error(`readFile ${code} (path len=${len})`);
+  }
+  if (!stat.isFile()) {
+    throw new Error(`readFile: not a regular file (path len=${String(path).length})`);
+  }
+  let buf;
+  try {
+    buf = fs.readFileSync(path);
+  } catch (e) {
+    const code = (e && e.code) || 'unknown';
+    throw new Error(`readFile ${code} after stat OK (size=${stat.size})`);
+  }
   const ext = path.split('.').pop().toLowerCase();
   const mime =
     ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg' :
     ext === 'png' ? 'image/png' :
     ext === 'tif' || ext === 'tiff' ? 'image/tiff' :
     ext === 'webp' ? 'image/webp' :
+    ext === 'heic' || ext === 'heif' ? 'image/heic' :
     ext === 'mp4' ? 'video/mp4' :
     ext === 'mov' ? 'video/quicktime' :
+    ext === 'mkv' ? 'video/x-matroska' :
+    ext === 'webm' ? 'video/webm' :
+    ext === 'm4v' ? 'video/x-m4v' :
     ext === 'wav' || ext === 'mp3' ? `audio/${ext === 'mp3' ? 'mpeg' : 'wav'}` :
     'application/octet-stream';
   return new Blob([buf], { type: mime });
