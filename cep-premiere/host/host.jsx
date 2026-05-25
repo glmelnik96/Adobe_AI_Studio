@@ -98,15 +98,76 @@ function _findProjectItemById(id) {
   return null;
 }
 
-function getBinSelection() {
+// Cобираем selection из всех доступных API. legacy `app.project.getSelection()`
+// возвращает пустой массив когда фокус ушёл из Project-панели (юзер кликнул
+// в CEP-кнопку — фокус ушёл — selection "сбросился"). В Pr 22+ есть
+// `app.getProjectViewSelection(viewID)` который держит селекцию независимо
+// от фокуса. Плюс fallback на `app.project.activeItem` (одиночный focused item)
+// и `app.sourceMonitor.getProjectItem()` (последний открытый клип).
+function _gatherBinSelection(attempts) {
+  // 1) Modern multi-view API (Pr 22+).
   try {
-    var sel = app.project.getSelection ? app.project.getSelection() : null;
-    if (!sel || sel.length === 0) return _err('no_selection');
+    if (typeof app.getProjectViewIDs === 'function') {
+      var ids = app.getProjectViewIDs() || [];
+      attempts.push('projectViewIDs=' + ids.length);
+      for (var i = 0; i < ids.length; i++) {
+        try {
+          var sel = app.getProjectViewSelection(ids[i]);
+          if (sel && sel.length) {
+            attempts.push('viewSel[' + i + ']=' + sel.length);
+            return sel;
+          }
+        } catch (e1) { attempts.push('viewSel[' + i + ']:' + String(e1)); }
+      }
+    } else { attempts.push('no_getProjectViewIDs'); }
+  } catch (e) { attempts.push('viewIDs:' + String(e)); }
+
+  // 2) Legacy `app.project.getSelection()`.
+  try {
+    if (app.project.getSelection) {
+      var legacy = app.project.getSelection();
+      attempts.push('legacy=' + (legacy ? legacy.length : 'null'));
+      if (legacy && legacy.length) return legacy;
+    } else { attempts.push('no_legacy_getSelection'); }
+  } catch (e) { attempts.push('legacy:' + String(e)); }
+
+  // 3) Single focused item (`app.project.activeItem`).
+  try {
+    var act = app.project.activeItem;
+    if (act) { attempts.push('activeItem=' + String(act.name)); return [act]; }
+    attempts.push('no_activeItem');
+  } catch (e) { attempts.push('activeItem:' + String(e)); }
+
+  // 4) Source Monitor — последний "открытый" клип. Иногда юзер
+  // double-click'ает в бине → клип попадает в Source Monitor, но
+  // селекция сбрасывается. Полезный fallback.
+  try {
+    if (app.sourceMonitor && app.sourceMonitor.getProjectItem) {
+      var smi = app.sourceMonitor.getProjectItem();
+      if (smi) { attempts.push('sourceMonitor=' + String(smi.name)); return [smi]; }
+      attempts.push('no_sourceMonitor_item');
+    }
+  } catch (e) { attempts.push('sourceMonitor:' + String(e)); }
+
+  return null;
+}
+
+function getBinSelection() {
+  var attempts = [];
+  try {
+    var sel = _gatherBinSelection(attempts);
+    if (!sel || sel.length === 0) {
+      return _err('no_selection', 'attempts=' + attempts.join(' | '));
+    }
     var items = [];
+    var skipped = [];
     for (var i = 0; i < sel.length; i++) {
       var pi = sel[i];
       var kind = _itemKind(pi);
-      if (['video','image','audio'].indexOf(kind) < 0) continue;
+      if (['video','image','audio'].indexOf(kind) < 0) {
+        try { skipped.push(String(pi.name) + ':' + kind); } catch (e) {}
+        continue;
+      }
       items.push({
         projectItemId: String(pi.nodeId),
         path: _mediaPath(pi),
@@ -114,9 +175,14 @@ function getBinSelection() {
         kind: kind,
       });
     }
-    if (items.length === 0) return _err('unsupported_kind');
-    return _ok({ items: items });
-  } catch (e) { return _err('exception', String(e)); }
+    if (items.length === 0) {
+      return _err('unsupported_kind',
+        'attempts=' + attempts.join(' | ') + ' | skipped=' + skipped.join(','));
+    }
+    return _ok({ items: items, attempts: attempts });
+  } catch (e) {
+    return _err('exception', String(e) + ' | attempts=' + attempts.join(' | '));
+  }
 }
 
 function getTimelineSelection(playheadOnly) {
@@ -850,6 +916,12 @@ function _binByName(name) {
 //   Linux: ext4 case-sensitive — оставляем как есть (separator only).
 function _normPathForCompare(p) {
   if (!p) return '';
+  // На Mac getMediaPath() части билдов Pr (AppleScript bridge / старые проекты)
+  // возвращает HFS-форму "Macintosh HD:Users:gleb:file.mov", а targetPath из
+  // importToBin приходит POSIX-формой "/Users/...". Без нормализации needle
+  // не совпадал с p и _findImportedByPath давал false-negative → "no new item
+  // after 8s poll" при успешном на самом деле импорте.
+  p = _macToPosix(p);
   if (_isWin()) return String(p).toLowerCase().replace(/\//g, '\\');
   if (_isMac()) return String(p).toLowerCase().replace(/\\/g, '/');
   return String(p).replace(/\\/g, '/');

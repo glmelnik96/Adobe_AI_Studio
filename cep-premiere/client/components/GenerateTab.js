@@ -42,18 +42,29 @@ function extOf(p) {
 function friendlyHostError(e) {
   const code = (e && e.result && e.result.error) || e.message || 'unknown';
   const reason = e && e.result && e.result.reason;
+  // Лог полного error в DevTools — для bin/timeline кейсов attempts-строка
+  // несёт точный путь которая API сдалась первой.
+  if (typeof console !== 'undefined' && e && e.result) {
+    // eslint-disable-next-line no-console
+    console.warn('[host error]', code, reason || '');
+  }
   const map = {
     no_source_monitor: 'Source Monitor unavailable in this Pr build',
     no_source_monitor_clip: 'Load a clip into the Source Monitor first (double-click clip in Project bin)',
     no_active_sequence: 'No active sequence — open or create a sequence in Premiere',
     no_playhead: 'Could not read playhead position from active sequence',
-    no_selection: 'Select an item in the Project bin first',
+    // Включаем reason — обычно содержит attempts=... с диагностикой какие
+    // API селекции сработали (полезно когда юзер РЕАЛЬНО выделил айтем,
+    // но getSelection() пуст из-за фокуса в CEP-панели).
+    no_selection: 'Select an item in the Project bin first' +
+                  (reason ? ' (debug: ' + String(reason).slice(0, 120) + ')' : ''),
     no_clip_at_playhead: 'Move the playhead over a video/image clip in the active sequence',
     no_clip_at_range: 'No clip under the Timeline In/Out marks (or playhead if no marks)',
     no_project_item: 'Clip under playhead has no linked project item',
     no_media_path: 'Clip media path is empty (offline / merged clip?)',
     marks_outside_clip: 'Timeline In/Out marks do not overlap any clip on the sequence',
-    unsupported_kind: 'Selected item is not an image/video/audio file',
+    unsupported_kind: 'Selected item is not an image/video/audio file' +
+                      (reason ? ' (debug: ' + String(reason).slice(0, 120) + ')' : ''),
     invalid_range: 'In/Out marks are missing or inverted — set marks on the timeline (I / O)',
     export_failed: 'Frame export failed' + (reason ? ' — ' + reason : ''),
   };
@@ -188,8 +199,12 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           fr = await api.extractFrame({ source_path: src.path, at_sec: Number(src.atSec) });
         } catch (e) {
           const detail = (e.body && e.body.detail) || {};
-          const reason = detail.hint || detail.error || e.message || 'unknown';
-          toast.error('ffmpeg frame failed: ' + reason);
+          // eslint-disable-next-line no-console
+          console.error('[extractFrame] detail:', detail, 'path was:', src.path);
+          const reason = detail.hint || detail.reason || detail.error || e.message || 'unknown';
+          const extra = detail.suffix ? ` [suffix=${detail.suffix}]` :
+                        detail.path ? ` [path=${detail.path}]` : '';
+          toast.error('ffmpeg frame failed: ' + reason + extra);
           return;
         }
         await ingestPath(slot, fr.path, 'timeline_frame', `frame_${Math.floor(Number(src.atSec) * 1000)}ms.jpg`);
@@ -213,6 +228,8 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           toast.error('Timeline In/Out: ' + friendlyHostError(e));
           return;
         }
+        // eslint-disable-next-line no-console
+        console.log('[timeline_io] path=', io.path, 'in=', io.inSec, 'out=', io.outSec, 'clipName=', io.clipName);
         let clip;
         try {
           clip = await api.clipVideo({
@@ -222,8 +239,15 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           });
         } catch (e) {
           const detail = (e.body && e.body.detail) || {};
-          const reason = detail.hint || detail.error || e.message || 'unknown';
-          toast.error('ffmpeg clip failed: ' + reason);
+          // eslint-disable-next-line no-console
+          console.error('[clipVideo] full detail:', detail, 'path was:', io.path);
+          // Surface reason BEFORE error code — `reason` несёт WHY (suffix_not_allowed,
+          // source_not_found, resolve_failed, etc.); error — это generic bucket.
+          const reason = detail.hint || detail.reason || detail.error || e.message || 'unknown';
+          const extra = detail.suffix ? ` [suffix=${detail.suffix}]` :
+                        detail.path ? ` [path=${detail.path}]` :
+                        detail.protocol ? ` [proto=${detail.protocol}]` : '';
+          toast.error('ffmpeg clip failed: ' + reason + extra);
           return;
         }
         const displayName = `${io.clipName || 'clip'}_${Number(io.inSec).toFixed(2)}-${Number(io.outSec).toFixed(2)}.mp4`;
@@ -257,8 +281,11 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           });
         } catch (e) {
           const detail = (e.body && e.body.detail) || {};
-          const reason = detail.hint || detail.error || e.message || 'unknown';
-          toast.error('ffmpeg clip failed: ' + reason);
+          // eslint-disable-next-line no-console
+          console.error('[clipVideo source_io] detail:', detail, 'path was:', io.path);
+          const reason = detail.hint || detail.reason || detail.error || e.message || 'unknown';
+          const extra = detail.suffix ? ` [suffix=${detail.suffix}]` : '';
+          toast.error('ffmpeg clip failed: ' + reason + extra);
           return;
         }
         const displayName = `${io.name || 'clip'}_${Number(io.inSec).toFixed(2)}-${Number(io.outSec).toFixed(2)}.mp4`;
