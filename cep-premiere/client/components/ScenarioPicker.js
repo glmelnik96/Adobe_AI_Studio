@@ -1,5 +1,6 @@
 import { html } from '../lib/html.js';
 import { slotLabel } from '../lib/slot_labels.js';
+import { EnumDropdown } from './EnumDropdown.js';
 
 // Friendly labels for the VideoScenario enum (sidecar/app/workflows/video_common.py).
 // Raw values (e.g. "ref_prompt_video") are too cryptic for users picking a flow.
@@ -19,12 +20,11 @@ export function ScenarioPicker({ scenarios, value, requiredSlots, onChange }) {
   const hint = slotNames.length
     ? `Needs: ${slotNames.join(', ')}`
     : 'No files needed — just a prompt.';
+  const items = scenarios.map(s => ({ value: s, label: SCENARIO_LABELS[s] || s }));
   return html`
     <div class="field">
       <label>Scenario</label>
-      <select value=${value} onChange=${e => onChange(e.target.value)}>
-        ${scenarios.map(s => html`<option value=${s}>${SCENARIO_LABELS[s] || s}</option>`)}
-      </select>
+      <${EnumDropdown} options=${items} value=${value} onChange=${onChange} />
       <div class="field-hint scenario-hint">${hint}</div>
     </div>
   `;

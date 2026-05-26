@@ -98,6 +98,11 @@ export function createApi({ fetch, baseUrl, getAuthHeaders }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ source_path, at_sec }),
       }),
+    // Disk-cache management — для UI «Очистить asset_uploads/».
+    // /assets/disk-usage возвращает {count, total_bytes} (preview перед чисткой).
+    // /assets/disk-cache (DELETE) удаляет файлы и возвращает {cleared_count, freed_bytes}.
+    getDiskUsage: () => request('/assets/disk-usage'),
+    clearDiskCache: () => request('/assets/disk-cache', { method: 'DELETE' }),
     _request: request,
   };
 }

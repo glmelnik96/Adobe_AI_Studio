@@ -44,6 +44,62 @@ async def list_assets(request: Request) -> dict:
     return {"assets": [e.model_dump() for e in cache.list()]}
 
 
+# ── Disk-cache management ───────────────────────────────────────────────
+# ВАЖНО: эти роуты должны быть объявлены ДО `/assets/{sha256}`, иначе
+# FastAPI матчит DELETE /assets/disk-cache как DELETE /assets/{sha256}
+# с sha256="disk-cache" и возвращает 404 "unknown_asset".
+# ────────────────────────────────────────────────────────────────────────
+
+@router.get("/assets/disk-usage")
+def disk_usage() -> dict:
+    """Сколько файлов и байт занято в asset_uploads/.
+
+    Туда складываются временные multipart-загрузки от CEP-панели и
+    извлечённые кадры/клипы из /clips. Нужно для preview перед чисткой.
+    """
+    d = paths.asset_uploads_dir()
+    if not d.exists():
+        return {"count": 0, "total_bytes": 0}
+    count = 0
+    total = 0
+    for p in d.iterdir():
+        if p.is_file():
+            try:
+                total += p.stat().st_size
+                count += 1
+            except OSError:
+                pass
+    return {"count": count, "total_bytes": total}
+
+
+@router.delete("/assets/disk-cache")
+def clear_disk_cache() -> dict:
+    """Удалить все временные файлы из asset_uploads/.
+
+    Файлы накапливаются от /clips/extract_frame, /clips/clip_video и
+    оборванных /assets uploads. sha256-cache (asset_cache.jsonl) НЕ трогаем —
+    он не занимает места на диске и переживает чистку, давая нам дедуп
+    после re-upload.
+
+    Не рекурсивно: только файлы верхнего уровня, поддиректории не трогаем.
+    """
+    d = paths.asset_uploads_dir()
+    if not d.exists():
+        return {"cleared_count": 0, "freed_bytes": 0}
+    cleared = 0
+    freed = 0
+    for p in d.iterdir():
+        if p.is_file():
+            try:
+                sz = p.stat().st_size
+                p.unlink()
+                cleared += 1
+                freed += sz
+            except OSError:
+                pass
+    return {"cleared_count": cleared, "freed_bytes": freed}
+
+
 @router.delete("/assets/{sha256}", status_code=204)
 async def delete_asset(sha256: str, request: Request):
     cache = request.app.state.asset_cache

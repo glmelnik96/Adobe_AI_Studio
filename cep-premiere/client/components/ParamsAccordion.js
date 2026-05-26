@@ -1,6 +1,7 @@
 import { html } from '../lib/html.js';
 import { useState } from '../vendor/preact-hooks.module.js';
 import { paramLabel, paramDescription, valueLabel } from '../lib/param_labels.js';
+import { EnumDropdown } from './EnumDropdown.js';
 
 // Render a single param row. Widget shape is dictated by `opt` (from sidecar
 // `describe_video_nodes` → `param_options`). Unknown params fall back to a
@@ -11,12 +12,12 @@ function ParamField({ name, value, opt, onChange }) {
   const labelEl = html`<label title=${desc || undefined}>${label}</label>`;
 
   if (opt && opt.kind === 'enum' && Array.isArray(opt.options)) {
+    const items = opt.options.map(o => ({ value: o, label: valueLabel(o) }));
     return html`
       <div class="field">
         ${labelEl}
-        <select value=${value} onChange=${e => onChange(name, e.target.value)}>
-          ${opt.options.map(o => html`<option value=${o}>${valueLabel(o)}</option>`)}
-        </select>
+        <${EnumDropdown} options=${items} value=${value}
+                         onChange=${v => onChange(name, v)} />
         ${desc ? html`<div class="field-hint">${desc}</div>` : null}
       </div>
     `;

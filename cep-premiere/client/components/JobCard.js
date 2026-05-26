@@ -3,6 +3,7 @@ import { useState, useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import { fmtDuration, jobAgeMs } from '../lib/format.js';
 import { NANO_BANANA_META } from '../lib/slot_schema.js';
 import { localPathToFileUrl, isRenderableImagePath } from '../lib/disk_save.js';
+import { toast } from '../lib/toast.js';
 
 const STATUS_CLS = {
   queued: 'q', running: 'r', completed: 'ok', failed: 'fail', canceled: 'fail',
@@ -51,6 +52,54 @@ export function JobCard({ job, videoNodes, onAction }) {
   const model = modelLabel(job.node_id, videoNodes);
   const isDone = job.status === 'completed';
   const isFailed = job.status === 'failed' || job.status === 'canceled';
+  // Retry показываем для completed/failed/canceled — любой завершённый job
+  // (где есть сохранённые params) может быть переиспользован как шаблон.
+  // Не показываем для queued/running/etc — там пользователь и так ждёт.
+  const canRetry = (isDone || isFailed) && (params.prompt || params.text_prompt || params.scenario);
+  const [promptExpanded, setPromptExpanded] = useState(false);
+
+  async function copyPrompt() {
+    if (!prompt) return;
+
+    // CEP iframe — не secure context: navigator.clipboard.writeText() есть, но
+    // бросает "Write permission denied". Поэтому сначала пробуем синхронный
+    // execCommand (он работает в CEP без permission gate, хоть и deprecated),
+    // и только если он не сработал — clipboard API. Так fallback реально нужен.
+    function execCopy(text) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.top = '0';
+      ta.style.left = '-9999px';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      const prevActive = document.activeElement;
+      ta.focus();
+      ta.select();
+      ta.setSelectionRange(0, text.length);
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (_) { ok = false; }
+      document.body.removeChild(ta);
+      if (prevActive && typeof prevActive.focus === 'function') {
+        try { prevActive.focus(); } catch (_) {}
+      }
+      return ok;
+    }
+
+    if (execCopy(prompt)) {
+      toast.success('Prompt copied');
+      return;
+    }
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(prompt);
+        toast.success('Prompt copied');
+        return;
+      }
+    } catch (_) { /* clipboard API в CEP часто denied — это норма */ }
+    toast.error('Copy failed — clipboard blocked in this CEP context');
+  }
 
   return html`
     <div class=${`job-card ${cls}`}>
@@ -61,7 +110,11 @@ export function JobCard({ job, videoNodes, onAction }) {
         </div>
         <span class="job-age" title=${`job_id=${job.job_id}`}>${age}</span>
       </div>
-      ${prompt ? html`<div class="job-prompt" title=${prompt}>${prompt}</div>` : null}
+      ${prompt ? html`
+        <div class=${`job-prompt${promptExpanded ? ' expanded' : ''}`}
+             title=${promptExpanded ? 'Click to collapse' : prompt}
+             onClick=${() => setPromptExpanded(e => !e)}>${prompt}</div>
+      ` : null}
       <div class="job-status">
         ${job.status}${job.status === 'running' ? ` · ${prog}%` : ''}
       </div>
@@ -82,8 +135,12 @@ export function JobCard({ job, videoNodes, onAction }) {
           <button class="primary-soft" onClick=${() => onAction('show', job)}>Show in bin</button>
           <button onClick=${() => onAction('download', job)}>Download</button>
         ` : null}
-        ${isFailed
-          ? html`<button class="primary-soft" onClick=${() => onAction('retry', job)}>Retry</button>`
+        ${canRetry
+          ? html`<button class="primary-soft" title="Restore form with this job's params"
+                         onClick=${() => onAction('retry', job)}>↻ Retry</button>`
+          : null}
+        ${prompt
+          ? html`<button title="Copy prompt to clipboard" onClick=${copyPrompt}>📋 Copy prompt</button>`
           : null}
         <div class="job-menu" ref=${menuRef}>
           <button class="job-menu-btn" title="More" onClick=${() => setMenuOpen(o => !o)}>⋯</button>

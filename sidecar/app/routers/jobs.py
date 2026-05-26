@@ -29,6 +29,11 @@ class JobCreate(BaseModel):
 
 
 def _state_to_dict(s: JobState) -> dict:
+    # params нужны клиенту для History UI: Retry (восстановление формы) и
+    # Copy prompt. Раньше не возвращались — кнопки оставались мёртвыми, т.к.
+    # canRetry требует params.prompt/text_prompt/scenario. _init_files убираем
+    # из ответа: это server-side paths, клиенту они бесполезны и засоряют JSON.
+    params_out = {k: v for k, v in (s.params or {}).items() if k != "_init_files"}
     return {
         "job_id": s.job_id,
         "node_id": s.node_id,
@@ -39,6 +44,7 @@ def _state_to_dict(s: JobState) -> dict:
         "error": s.error,
         "created_at": s.created_at.isoformat().replace("+00:00", "Z"),
         "updated_at": s.updated_at.isoformat().replace("+00:00", "Z"),
+        "params": params_out,
     }
 
 

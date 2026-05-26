@@ -193,6 +193,32 @@ describe('api auth header injection', () => {
   });
 });
 
+describe('api disk cache', () => {
+  it('getDiskUsage GETs /assets/disk-usage and returns body', async () => {
+    const fm = vi.fn().mockResolvedValueOnce(new Response(
+      JSON.stringify({ count: 3, total_bytes: 1024 }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    ));
+    const api = createApi({ fetch: fm, baseUrl: 'http://h' });
+    const out = await api.getDiskUsage();
+    expect(out).toEqual({ count: 3, total_bytes: 1024 });
+    expect(fm.mock.calls[0][0]).toBe('http://h/assets/disk-usage');
+    expect(fm.mock.calls[0][1].method).toBe('GET');
+  });
+
+  it('clearDiskCache DELETEs /assets/disk-cache and returns stats', async () => {
+    const fm = vi.fn().mockResolvedValueOnce(new Response(
+      JSON.stringify({ cleared_count: 5, freed_bytes: 2048 }),
+      { status: 200, headers: { 'content-type': 'application/json' } }
+    ));
+    const api = createApi({ fetch: fm, baseUrl: 'http://h' });
+    const out = await api.clearDiskCache();
+    expect(out).toEqual({ cleared_count: 5, freed_bytes: 2048 });
+    expect(fm.mock.calls[0][0]).toBe('http://h/assets/disk-cache');
+    expect(fm.mock.calls[0][1].method).toBe('DELETE');
+  });
+});
+
 describe('api.previewCost', () => {
   it('POSTs JSON with node_id+params, init_files=empty', async () => {
     const fm = vi.fn().mockResolvedValueOnce(new Response(

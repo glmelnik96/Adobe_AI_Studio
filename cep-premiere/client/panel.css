@@ -28,6 +28,13 @@ html, body { margin: 0; padding: 0; height: 100%; background: var(--bg); color: 
 .balance-value { font-weight: 600; font-variant-numeric: tabular-nums; }
 .balance-value.loading { opacity: 0.6; }
 .balance-value.err { color: var(--red); }
+.header-icon-btn {
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg-dim); padding: 2px 6px; font-size: 12px; line-height: 1.4;
+  border-radius: 10px; cursor: pointer;
+}
+.header-icon-btn:hover:not(:disabled) { color: var(--fg); border-color: var(--fg-dim); }
+.header-icon-btn:disabled { opacity: 0.5; cursor: progress; }
 
 /* ── Tabs ──────────────────────────────────────────────────────────── */
 .tabs { display: flex; border-bottom: 1px solid var(--border); }
@@ -78,6 +85,29 @@ button.primary-soft:hover:not(:disabled) { background: var(--accent); color: #ff
 .slot-remove { background: transparent; border: none; color: var(--fg-dim); font-size: 16px; line-height: 1; padding: 0 6px; }
 .slot-remove:hover { color: var(--red); }
 
+/* ── EnumDropdown (custom <select> replacement, fixes CEP popup clipping) ─ */
+.edrop { position: relative; width: 100%; }
+.edrop-trigger {
+  width: 100%; box-sizing: border-box; display: flex; align-items: center;
+  justify-content: space-between; gap: 6px; padding: 4px 6px;
+  background: var(--bg-2); color: var(--fg); border: 1px solid var(--border);
+  border-radius: 2px; font: inherit; cursor: pointer; text-align: left;
+}
+.edrop-trigger:hover { border-color: var(--fg-dim); }
+.edrop-trigger.open { border-color: var(--accent); }
+.edrop-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.edrop-caret { color: var(--fg-dim); font-size: 9px; flex-shrink: 0; }
+.edrop-popup {
+  position: fixed; z-index: 100;
+  background: var(--bg-3); border: 1px solid var(--accent); border-radius: 2px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  overflow-y: auto;
+}
+.edrop-item { padding: 5px 8px; cursor: pointer; font-size: 12px; }
+.edrop-item:hover { background: var(--bg-2); }
+.edrop-item.selected { background: var(--bg-2); color: var(--accent); }
+.edrop-empty { padding: 6px 8px; color: var(--fg-dim); font-style: italic; font-size: 11px; }
+
 /* ── Params ────────────────────────────────────────────────────────── */
 .params { margin-top: 8px; }
 .params-head { padding: 6px 0; cursor: pointer; color: var(--fg-dim); user-select: none; }
@@ -108,7 +138,11 @@ button.primary-soft:hover:not(:disabled) { background: var(--accent); color: #ff
 .job-scenario { color: var(--fg-dim); margin-left: 6px; font-size: 11px; }
 .job-age { color: var(--fg-dim); font-size: 11px; flex-shrink: 0; }
 .job-prompt { font-size: 11px; color: var(--fg-dim); margin-top: 4px; line-height: 1.4; max-height: 3.6em;
-              overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; }
+              overflow: hidden; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical;
+              cursor: pointer; }
+.job-prompt:hover { color: var(--fg); }
+.job-prompt.expanded { max-height: none; -webkit-line-clamp: unset; display: block;
+                       white-space: pre-wrap; word-break: break-word; }
 .job-status { font-size: 11px; margin-top: 4px; }
 .job-error { font-size: 11px; color: var(--red); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-thumb { display: block; max-width: 100%; margin-top: 6px; border-radius: 2px; }
@@ -122,6 +156,22 @@ button.primary-soft:hover:not(:disabled) { background: var(--accent); color: #ff
 .job-menu-item { padding: 6px 10px; cursor: pointer; font-size: 11px; }
 .job-menu-item:hover { background: var(--bg-2); }
 .job-menu-item.danger { color: var(--red); }
+
+/* ── Disk-cache cleanup row (History tab) ──────────────────────────── */
+.disk-cache-row {
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 10px; padding: 6px 8px;
+  background: var(--bg-2); border: 1px solid var(--border); border-radius: 4px;
+}
+.disk-cache-btn {
+  flex: 1; text-align: left;
+  background: transparent; border: 1px solid var(--border);
+  color: var(--fg); padding: 5px 8px; font-size: 11px; line-height: 1.3;
+  border-radius: 3px; cursor: pointer;
+}
+.disk-cache-btn:hover:not(:disabled) { border-color: var(--red); color: var(--red); }
+.disk-cache-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.disk-cache-size { color: var(--fg-dim); font-size: 10px; white-space: nowrap; }
 
 /* ── Job filter ────────────────────────────────────────────────────── */
 .job-filter { display: flex; gap: 4px; margin-bottom: 10px; font-size: 11px; flex-wrap: wrap; }

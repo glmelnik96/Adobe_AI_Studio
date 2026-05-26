@@ -1,4 +1,5 @@
 import { html } from '../lib/html.js';
+import { EnumDropdown } from './EnumDropdown.js';
 
 // Node 94 (Nano Banana) is the only image model; everything else from
 // /nodes/video produces video. Tagging in the dropdown removes the "wait,
@@ -8,14 +9,14 @@ function modelKind(nodeId) {
 }
 
 export function ModelPicker({ nodes, value, onChange }) {
+  const items = nodes.map(n => ({
+    value: n.node_id,
+    label: `${n.model} — ${modelKind(n.node_id)}`,
+  }));
   return html`
     <div class="field">
       <label>Model</label>
-      <select value=${value} onChange=${e => onChange(parseInt(e.target.value, 10))}>
-        ${nodes.map(n => html`
-          <option value=${n.node_id}>${n.model} — ${modelKind(n.node_id)}</option>
-        `)}
-      </select>
+      <${EnumDropdown} options=${items} value=${value} onChange=${onChange} />
     </div>
   `;
 }
