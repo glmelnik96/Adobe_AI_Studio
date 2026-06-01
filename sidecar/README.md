@@ -1,4 +1,4 @@
-# Phygital Studio — Sidecar
+# Adobe AI Studio — Sidecar
 
 Локальный Python sidecar (FastAPI на `127.0.0.1:8765`), который мостит Phygital+ API в Adobe CEP-панели.
 

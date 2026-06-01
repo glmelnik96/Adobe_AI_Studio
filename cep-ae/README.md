@@ -6,7 +6,7 @@ CEP 11 панель для Adobe After Effects 2023+. Status: scaffold.
 
 | Путь | Назначение |
 |---|---|
-| `CSXS/manifest.xml` | регистрация панели, host AEFT `[23.0,99.9]`, Menu = «Phygital Studio» |
+| `CSXS/manifest.xml` | регистрация панели, host AEFT `[23.0,99.9]`, Menu = «Adobe AI Studio» |
 | `client/index.html` | HTML-разметка панели (stub) |
 | `client/panel.js` | UI-логика, HTTP-клиент к `localhost:8765` (stub) |
 | `host/insert_media.jsx` | ExtendScript: `importFile` + `comp.layers.add` (stub) |
@@ -20,7 +20,7 @@ Windows:
 2. Симлинк (CMD admin):
    `mklink /D "%AppData%\Adobe\CEP\extensions\PhygitalStudioAE" "%USERPROFILE%\Documents\Phygital-Adobe-Studio\cep-ae"`
 3. Полный рестарт After Effects.
-4. Window → Extensions → Phygital Studio.
+4. Window → Extensions → Adobe AI Studio.
 5. DevTools: `http://localhost:8098/`.
 
 macOS:

@@ -154,19 +154,19 @@ python -m scripts.cli auth login
    расширения только при старте процесса — простой Reload Window не подцепит
    новый симлинк.
 2. Открыть Pr заново.
-3. `Window → Extensions → Phygital Studio`.
+3. `Window → Extensions → Adobe AI Studio`.
 
 Что должно произойти:
 
 - В шапке панели появляется pill «online» (зелёная) — sidecar autostart-нулся
   и `/health` отвечает.
-- Рядом — pill с балансом кредитов Phygital+.
+- Рядом — pill с балансом кредитов аккаунта.
 - Можно выбрать модель, заполнить промпт, нажать Generate.
 
 Если pill красный (offline):
 1. Подождать 15 секунд (autostart polls /health до 15s).
 2. Открыть DevTools панели: <http://localhost:8099> в Chrome → выбрать
-   `Phygital Studio` → Console.
+   `Adobe AI Studio` → Console.
 3. Поискать ошибки от `ensureSidecar()`.
 4. Проверить, что `pythonw --version` отвечает в PowerShell.
 

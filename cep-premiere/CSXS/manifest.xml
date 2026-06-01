@@ -34,7 +34,7 @@
         </Lifecycle>
         <UI>
           <Type>Panel</Type>
-          <Menu>Phygital Studio</Menu>
+          <Menu>Adobe AI Studio</Menu>
           <Geometry>
             <Size>
               <Height>720</Height>

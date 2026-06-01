@@ -1,6 +1,6 @@
-# Phygital Studio — Premiere Pro panel
+# Adobe AI Studio — Premiere Pro panel
 
-Sub-project B of Phygital Adobe Studio. CEP panel that drives generation via
+Sub-project B of Adobe AI Studio. CEP panel that drives generation via
 the local FastAPI sidecar.
 
 The panel **auto-spawns the sidecar** the first time it boots (CEP Node.js is
@@ -57,7 +57,7 @@ not pop a console window.
 
 ### 4. First-time sidecar setup
 
-Run the Playwright recon flow once to capture a Phygital+ session:
+Run the Playwright recon flow once to capture a backend session:
 
 ```powershell
 cd sidecar
@@ -74,7 +74,7 @@ and the panel will see `health.status === 'online'` immediately.
 
 ### 5. Restart Premiere
 
-`Alt+F4` to fully exit, then reopen. **Window → Extensions → Phygital Studio**.
+`Alt+F4` to fully exit, then reopen. **Window → Extensions → Adobe AI Studio**.
 
 Sidecar will spawn automatically; the header pill turns green when /health
 comes up (≤ 15 s).
@@ -138,7 +138,7 @@ Session goes to `~/Library/Application Support/PhygitalStudio/session.json`.
 ### 5. Restart Premiere
 
 `Cmd+Q` to fully quit (not just close the window), then reopen.
-**Window → Extensions → Phygital Studio**.
+**Window → Extensions → Adobe AI Studio**.
 
 ---
 

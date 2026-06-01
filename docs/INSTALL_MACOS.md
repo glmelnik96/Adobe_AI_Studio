@@ -34,7 +34,7 @@ chmod +x scripts/install_mac.sh
 - `--reinstall-venv` — снести и пересоздать `sidecar/.venv`
 
 После завершения: `Cmd+Q` Pr (если открыт) → переоткрыть →
-`Window → Extensions → Phygital Studio`.
+`Window → Extensions → Adobe AI Studio`.
 
 ---
 
@@ -186,12 +186,12 @@ SuperTokens cookies и пишет `session.json` в
 1. **Полностью закрыть Pr** (`Cmd+Q`, не просто `Cmd+W`). CEP сканит расширения
    только при старте процесса.
 2. Открыть Pr заново.
-3. `Window → Extensions → Phygital Studio`.
+3. `Window → Extensions → Adobe AI Studio`.
 
 Что должно произойти:
 
 - В шапке pill «online» (зелёная) — autostart поднял sidecar.
-- Pill с балансом кредитов Phygital+.
+- Pill с балансом кредитов аккаунта.
 - На первом запуске **macOS может запросить TCC-разрешение**: «Premiere Pro
   хочет доступ к Files and Folders / Documents». **Одобрить** — иначе sidecar
   не сможет читать файлы и писать session.json.
@@ -199,7 +199,7 @@ SuperTokens cookies и пишет `session.json` в
 Если pill красный:
 1. Подождать 15 секунд (autostart polls /health до 15s).
 2. DevTools панели: <http://localhost:8099> в Chrome → выбрать
-   `Phygital Studio` → Console.
+   `Adobe AI Studio` → Console.
 3. Поискать ошибки от `ensureSidecar()`.
 4. Проверить, что `python3 --version` отвечает в Terminal.
 

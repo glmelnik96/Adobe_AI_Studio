@@ -56,7 +56,7 @@ export function Header({ health, api, store }) {
   const balLabel = bal.infinity ? '∞' : fmtBalance(bal.value);
   const balTitle =
     bal.error ? `Balance: ${bal.error}` :
-    bal.value != null ? `Phygital+ credits — refreshes every 30s` :
+    bal.value != null ? `Account credits — refreshes every 30s` :
     'Balance — not available (sidecar offline?)';
 
   // Sign-in CTA. Видна только когда sidecar отвечает но session невалидна
@@ -74,7 +74,7 @@ export function Header({ health, api, store }) {
     setLoggingIn(true);
     try {
       await api.startRecon();
-      toast.success('Opening browser to sign in to Phygital+…');
+      toast.success('Opening browser to sign in…');
     } catch (e) {
       // 409 = recon уже идёт. Это не ошибка — оставляем loggingIn=true и ждём.
       if (e && e.status === 409) {
@@ -89,7 +89,7 @@ export function Header({ health, api, store }) {
 
   return html`
     <div class="header">
-      <div class="title">Phygital Studio</div>
+      <div class="title">Adobe AI Studio</div>
       <div class="header-spacer"></div>
       ${health.status === 'online' ? html`
         <div class="balance" title=${balTitle}>
@@ -99,7 +99,7 @@ export function Header({ health, api, store }) {
       ` : null}
       ${health.status === 'no_session' ? html`
         <button class="signin-btn" onClick=${onSignIn} disabled=${loggingIn}
-          title=${loggingIn ? 'Browser opened — complete sign-in there' : 'Sign in to Phygital+ via browser'}>
+          title=${loggingIn ? 'Browser opened — complete sign-in there' : 'Sign in via browser'}>
           ${loggingIn ? 'Signing in…' : 'Sign in'}
         </button>
       ` : null}

@@ -4,12 +4,14 @@
 
 ## Контекст в одном абзаце
 
-Проект `Phygital-Adobe-Studio` — две независимые CEP-панели (Premiere Pro и After Effects)
-+ локальный Python-sidecar. Цель — генерировать изображения и видео через Phygital+ прямо
-из Adobe и класть результат на таймлайн / в comp. Архитектура — sidecar pattern (FastAPI
-на `localhost:8765` поверх переиспользуемого Python-клиента из `Phygital-bot`). Источник
-истины по архитектуре — [ARCHITECTURE.md](ARCHITECTURE.md), по auth — [AUTH.md](AUTH.md),
-исходный аудит-обоснование — [AUDIT.md](AUDIT.md), план — [ROADMAP.md](ROADMAP.md).
+Проект `Adobe AI Studio` (internal repo path остался `Phygital-Adobe-Studio` для
+совместимости со старыми клонами) — две независимые CEP-панели (Premiere Pro и
+After Effects) + локальный Python-sidecar. Цель — генерировать изображения и видео
+через Phygital+ прямо из Adobe и класть результат на таймлайн / в comp. Архитектура —
+sidecar pattern (FastAPI на `localhost:8765` поверх переиспользуемого Python-клиента
+из `Phygital-bot`). Источник истины по архитектуре — [ARCHITECTURE.md](ARCHITECTURE.md),
+по auth — [AUTH.md](AUTH.md), исходный аудит-обоснование — [AUDIT.md](AUDIT.md),
+план — [ROADMAP.md](ROADMAP.md).
 
 **Текущая версия:** V1.2-WIP (ветка `feat/history-ux-and-dropdown-fixes`,
 коммиты `e510421` + `cda87d3` + `197cb94`). Последний релиз — V1.1 (2026-05-23).

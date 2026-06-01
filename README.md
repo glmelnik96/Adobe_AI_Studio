@@ -1,8 +1,8 @@
-# Phygital-Adobe-Studio
+# Adobe AI Studio
 
 Две независимые CEP-панели (Adobe Premiere Pro и After Effects) + локальный Python-sidecar.
-Цель — генерировать изображения и видео через Phygital+ (Sora, VEO, Runway, Kling, Nano Banana,
-Flux, GPT Image и др.) прямо из интерфейса Adobe и автоматически класть результат на таймлайн
+Цель — генерировать изображения и видео (Sora, VEO, Runway, Kling, Nano Banana, Flux,
+GPT Image и др.) прямо из интерфейса Adobe и автоматически класть результат на таймлайн
 (Pr) или в активный composition (AE).
 
 **Status (2026-05-23, V1.1):**
@@ -28,14 +28,14 @@ Flux, GPT Image и др.) прямо из интерфейса Adobe и авто
 | [docs/NEXT_AUDIT.md](docs/NEXT_AUDIT.md) | Открытые вопросы для следующего аудита (после V1.1) |
 | [docs/AUDIT_V1.1.md](docs/AUDIT_V1.1.md) | Комплексный аудит после V1.1: internal + external, топ-10 приоритетов V1.2 |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Sidecar + CEP, потоки данных, контракты HTTP |
-| [docs/AUTH.md](docs/AUTH.md) | Бутстрап Phygital-сессии через Playwright recon |
+| [docs/AUTH.md](docs/AUTH.md) | Бутстрап backend-сессии через Playwright recon |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | План работ по фазам |
 | [docs/HANDOFF.md](docs/HANDOFF.md) | Как подхватить проект в новом Claude Code чате |
 
 ## Структура
 
 ```
-sidecar/        Python FastAPI поверх client/ и workflows/ из Phygital-bot
+sidecar/        Python FastAPI: HTTP-обёртка над backend-клиентом + workflows
 cep-premiere/   CEP 12 панель для Premiere Pro 2024+
 cep-ae/         CEP 11 панель для After Effects 2023+
 shared/         JSON-пресеты нод, общие промпт-доки
@@ -44,15 +44,15 @@ docs/           аудит, архитектура, auth, roadmap, handoff
 
 ## Источники переиспользуемого кода (вне этого репо)
 
-- `<USERPROFILE>\Documents\Phygital-bot\` — `client/` + `workflows/` = база sidecar'а.
-- `<USERPROFILE>\Documents\Phygital_MCP\` — альтернативный transport (MCP) поверх той же auth-логики.
+- `<USERPROFILE>\Documents\Phygital-bot\` — backend-клиент и workflows, на которых
+  построен sidecar.
 - `<USERPROFILE>\Documents\Adobe-Extensions-Audit\ext_pr\` — клон Extensions-LLM-Chat_Pr,
   справочно (CSXS-манифест, bridge-паттерн CEP↔ExtendScript).
 - `<USERPROFILE>\Documents\Adobe-Extensions-Audit\ext_main\` — клон Extensions-LLM-Chat (AE),
   справочно (готовые `import_file`+`add_to_comp` в `host/index.jsx`).
 
-Эти проекты — независимые продукты. Phygital-Adobe-Studio их не модифицирует, только
-читает как референс и (для sidecar'а) переиспользует Python-модули из Phygital-bot.
+Эти проекты — независимые продукты. Adobe AI Studio их не модифицирует, только
+читает как референс и переиспользует Python-модули из Phygital-bot.
 
 ## Запуск
 
@@ -65,7 +65,8 @@ docs/           аудит, архитектура, auth, roadmap, handoff
   (CSXS-манифест + dev-install для Win/Mac); полная панель — в sub-project C.
 
 Контракт между sidecar и панелями — `http://127.0.0.1:8765`, идентичный
-на обеих платформах. Один путь session.json:
+на обеих платформах. Один путь session.json (имя директории сохранено
+для совместимости с уже установленными копиями):
 - Windows: `%LOCALAPPDATA%\PhygitalStudio\session.json`
 - macOS:   `~/Library/Application Support/PhygitalStudio/session.json`
 
