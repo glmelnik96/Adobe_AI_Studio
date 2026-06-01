@@ -23,8 +23,8 @@
               │                      │
         ┌─────┴──────────────────────┴───────┐
         │ Python sidecar (FastAPI + uvicorn) │
-        │ — переиспользует workflows/* и     │
-        │   client/* из Phygital-bot         │
+        │ — vendored backend-клиент и базовые│
+        │   workflows                        │
         │ — добавляет video-workflow классы  │
         │   (sora, veo, runway, kling)       │
         │ — рулит очередью, скачивает S3 в   │
@@ -39,8 +39,8 @@
 
 | Альтернатива | Что не так |
 |---|---|
-| JS-порт Phygital-клиента в CEP | SuperTokens (header-mode, rid:anti-csrf, refresh-cookies), truststore-аналог под Cloud.ru MITM, HTTP/2 multipart с `fileobject` — 2-3 недели работы, новые баги. |
-| Webview-перехват в CEP CEF | Хрупко: при обновлении SPA-фронта Phygital cookies могут переехать; CEF не умеет в `truststore`. |
+| JS-порт backend-клиента в CEP | SuperTokens (header-mode, rid:anti-csrf, refresh-cookies), truststore-аналог под MITM-прокси, HTTP/2 multipart с `fileobject` — 2-3 недели работы, новые баги. |
+| Webview-перехват в CEP CEF | Хрупко: при обновлении SPA-фронта backend'а cookies могут переехать; CEF не умеет в `truststore`. |
 | MCP-only (без HTTP) | CEP не запускает MCP-stdio-сервер удобно из панели. HTTP проще для UI-polling и SSE. |
 | FastAPI sidecar (выбрано) | Тонкий слой поверх уже-работающего кода. 1-2 дня MVP. |
 
@@ -63,7 +63,7 @@
 ## Очередь и persistence
 
 `TaskRegistry` (в памяти + JSON-журнал в `%LOCALAPPDATA%\PhygitalStudio\jobs.jsonl`):
-- На рестарт sidecar'а — read-only восстановление статусов незавершённых задач (полл Phygital
+- На рестарт sidecar'а — read-only восстановление статусов незавершённых задач (полл backend'а
   по `task_id`, ресинхронизация).
 - На рестарт Pr/AE — панель при загрузке делает `GET /jobs?status in {running,pending,...}` и
   восстанавливает список.
@@ -109,9 +109,8 @@ phygitalStudio_importAndAdd({
 
 ## Безопасность
 
-- API-ключи Cloud.ru FM (для chat/whisper, если будут использоваться внутри панели) — в
-  `sidecar/.env`, никогда не уходят в CEP-панель.
-- `session.json` Phygital — только в `%LOCALAPPDATA%\PhygitalStudio\` (или
+- Любые API-ключи внешних сервисов — в `sidecar/.env`, никогда не уходят в CEP-панель.
+- `session.json` — только в `%LOCALAPPDATA%\PhygitalStudio\` (или
   `~/Library/Application Support/PhygitalStudio/`), gitignore.
 - Sidecar слушает строго `127.0.0.1:8765` без CORS (CEP-панель — same-origin через `localhost`).
 

@@ -175,7 +175,7 @@ python3 -m scripts.auth_recon
 Альтернатива — `python3 -m scripts.cli auth login`, она требует уже
 запущенного sidecar'а на `127.0.0.1:8765`.)
 
-Откроется headed Chromium. Залогиниться в Phygital+ — скрипт ловит
+Откроется headed Chromium. Залогиниться в открывшемся окне — скрипт ловит
 SuperTokens cookies и пишет `session.json` в
 `~/Library/Application Support/PhygitalStudio/session.json`.
 
@@ -286,7 +286,7 @@ defaults delete com.adobe.CSXS.12 PlayerDebugMode
 
 ### img2img / i2v завершается через ~30 сек без ошибки
 
-- Silent-cancel Phygital из-за рассинхрона `value` ↔ `meta.dimensions`.
+- Silent-cancel backend из-за рассинхрона `value` ↔ `meta.dimensions`.
   Перепроверить, что обновлён `workflows/video_*.py` и тесты
   `test_workflow_video_*.py` зелёные.
 

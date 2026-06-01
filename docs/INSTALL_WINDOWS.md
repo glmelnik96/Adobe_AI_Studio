@@ -135,7 +135,7 @@ cd $env:USERPROFILE\Documents\Phygital-Adobe-Studio\sidecar
 python -m scripts.cli auth login
 ```
 
-Откроется headed Chromium. Залогиниться в Phygital+ обычным образом —
+Откроется headed Chromium. Залогиниться в открывшемся окне обычным образом —
 скрипт ловит SuperTokens cookies, пишет `session.json` в
 `%LOCALAPPDATA%\PhygitalStudio\session.json`.
 
@@ -237,7 +237,7 @@ reg delete "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /f
 - В V1.1 ASCII-staging убран — Pr 2024.2+ ест кириллические UTF-8 пути
   напрямую. Если всё-таки `importFiles` падает: открыть CEP DevTools
   (`http://localhost:8099`), искать ошибку от `host.jsx` `importToBin`.
-  Возможные причины: байты с Phygital повредились / Content-Type соврал
+  Возможные причины: байты с backend повредились / Content-Type соврал
   (PNG-заголовок поверх JPEG-байт) — посмотреть, что лежит в
   `%LOCALAPPDATA%\PhygitalStudio\downloads-panel\`. `disk_save.js _sniffExt`
   должен переименовать расширение под реальные magic-байты — если файл
@@ -251,7 +251,7 @@ reg delete "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /f
 
 ### img2img / i2v завершается через ~30 сек без ошибки
 
-- Это silent-cancel от Phygital из-за рассинхрона `value` ↔ `meta.dimensions`.
+- Это silent-cancel от backend из-за рассинхрона `value` ↔ `meta.dimensions`.
   Перепроверить, что обновлён `workflows/video_*.py` и тесты
   `test_workflow_video_*.py` зелёные.
 

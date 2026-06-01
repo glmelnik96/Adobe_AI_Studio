@@ -12,20 +12,20 @@
   есть ли prompt/scenario у job'а, и History-кнопки Retry / Copy prompt
   никогда не рендерились. Из ответа исключается только `_init_files`
   (server-side пути, клиенту не нужны).
-- **Прокидывание Phygital `progress` в `JobState`** (workflows/base.py
+- **Прокидывание backend `progress` в `JobState`** (workflows/base.py
   + video_base.py + image_gen.py + services/job_runner.py).
   Раньше `wait()`-loop только логировал `data['progress']`, никогда не звал
   `registry.update_status(progress=...)` → `JobState.progress` оставался
   `None` до момента переключения статуса на `completed`, а CEP-UI показывал
   0% всё время генерации и резко прыгал в 100% при завершении. Теперь
-  `Workflow._emit_progress()` нормализует значение Phygital (0..100 либо
+  `Workflow._emit_progress()` нормализует значение backend (0..100 либо
   0..1 → 0..1, clamp до 1.0), дедуплицирует одинаковые отчёты и через
   callback `on_progress`, выставленный из `job_runner.run_job`, пушит
   фракцию в registry. Исключения в callback логируются и подавляются,
   чтобы не валить poll-loop.
 - **Synth-progress fallback + диагностический first-poll лог** (`197cb94`,
   workflows/base.py `_synth_progress` / `EXPECTED_DURATION_S`).
-  Если Phygital не отдаёт `progress` (только status/position), `wait()`
+  Если backend не отдаёт `progress` (только status/position), `wait()`
   засекает момент перехода в running и рисует linear ramp до
   `SYNTH_PROGRESS_CAP=0.95` по elapsed (image=25s, video=90s). Реальный
   API-progress всегда побеждает synth. На первом poll'е логируется полный

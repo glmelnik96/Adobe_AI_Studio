@@ -1,6 +1,6 @@
 # Adobe AI Studio — Sidecar
 
-Локальный Python sidecar (FastAPI на `127.0.0.1:8765`), который мостит Phygital+ API в Adobe CEP-панели.
+Локальный Python sidecar (FastAPI на `127.0.0.1:8765`), который мостит backend API в Adobe CEP-панели.
 
 ## Установка (Windows)
 
@@ -14,7 +14,7 @@ playwright install chromium
 
 ## Vendor sync
 
-`app/phygital_client/` и `app/workflows/{base,image_gen}.py` — vendor copy от `Phygital-bot`. Никогда не редактируй вручную.
+`app/phygital_client/` и `app/workflows/{base,image_gen}.py` — vendored backend-клиент. Никогда не редактируй вручную.
 
 Ресинк:
 ```cmd
@@ -100,7 +100,7 @@ curl -X POST http://127.0.0.1:8765/jobs \
   }'
 ```
 
-Один и тот же файл, переданный в несколько slot'ов или несколько job'ов, заливается на Phygital+ один раз (кэш по sha256 в `asset_cache.jsonl`).
+Один и тот же файл, переданный в несколько slot'ов или несколько job'ов, заливается на backend один раз (кэш по sha256 в `asset_cache.jsonl`).
 
 ## MSIX sandbox (Windows)
 
@@ -119,7 +119,7 @@ pytest -m live -v -s             # требует sidecar + сессии
 
 | Файл | Что |
 |---|---|
-| `session.json` | Phygital cookies + JWT |
+| `session.json` | backend cookies + JWT |
 | `user_data/` | Playwright persistent profile |
 | `downloads/<job_id>/` | Скачанные результаты |
 | `uploads/<session_id>/` | (для sub-project D) загруженные init-картинки |
