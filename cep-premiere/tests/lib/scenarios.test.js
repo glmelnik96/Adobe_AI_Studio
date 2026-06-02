@@ -108,18 +108,20 @@ describe('cold boot', () => {
     expect(d.enhanced_prompt).toBeNull();
   });
 
-  it('FAMILIES list is exactly the 3 V1.2 buckets', () => {
-    expect(FAMILIES).toEqual(['image', 'video', 'upscale']);
+  it('FAMILIES list is exactly the 4 V1.2 buckets', () => {
+    expect(FAMILIES).toEqual(['image', 'video', 'upscale', 'voice']);
   });
 
   it('listNodesByFamily routes nodes correctly', () => {
     const img = listNodesByFamily({ videoNodes: VIDEO_NODES, family: 'image' });
     const vid = listNodesByFamily({ videoNodes: VIDEO_NODES, family: 'video' });
     const ups = listNodesByFamily({ videoNodes: VIDEO_NODES, family: 'upscale' });
+    const voi = listNodesByFamily({ videoNodes: VIDEO_NODES, family: 'voice' });
     const num = (a, b) => a - b;
     expect(img.map(n => n.node_id).sort(num)).toEqual([94, 98]);
     expect(vid.map(n => n.node_id).sort(num)).toEqual([74, 100, 121, 124]);
     expect(ups.map(n => n.node_id)).toEqual([87]);
+    expect(voi.map(n => n.node_id)).toEqual([89]);
   });
 });
 

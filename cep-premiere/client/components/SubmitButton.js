@@ -4,7 +4,7 @@ import { validateDraft } from '../lib/validation.js';
 import { makeCostKey, isEnhancedFresh } from '../lib/state.js';
 import { slotLabel } from '../lib/slot_labels.js';
 import { toast } from '../lib/toast.js';
-import { getNodeMeta, nodeHasPrompt } from '../lib/slot_schema.js';
+import { getNodeMeta, nodeHasPrompt, nodeSupportsEnhancer, getNodeFamily } from '../lib/slot_schema.js';
 
 // Turn validation errors into one-line user hints. Same field codes the
 // validation lib emits, but with friendly slot/scenario names baked in.
@@ -45,9 +45,11 @@ export function SubmitButton({ snap, api, onSubmitted }) {
 
   // V1.2: ✨ Enhance toggle ON но preview ещё не сделан / устарел —
   // блокируем submit. Иначе юзер удивится, что заплатил без энхансинга.
-  // Topaz (nodeHasPrompt=false) — enhance к нему не относится, не блокируем.
+  // Topaz/Voice (nodeSupportsEnhancer=false) — enhance к ним не относится,
+  // не блокируем (toggle в UI скрыт, но draft.enhance_prompt мог остаться
+  // в state от прошлой ноды).
   const meta = getNodeMeta({ videoNodes, nodeId: draft.model_id });
-  const enhanceRequired = draft.enhance_prompt && nodeHasPrompt(meta);
+  const enhanceRequired = draft.enhance_prompt && nodeSupportsEnhancer(meta);
   const enhanceFresh = isEnhancedFresh(draft);
   const needsEnhancePreview = enhanceRequired && !enhanceFresh;
 
@@ -80,7 +82,14 @@ export function SubmitButton({ snap, api, onSubmitted }) {
       const finalPrompt = (enhanceRequired && enhanceFresh)
         ? (draft.enhanced_prompt || draft.prompt)
         : draft.prompt;
-      const params = { ...defaults, ...draft.params, prompt: finalPrompt, scenario: draft.scenario };
+      // Voice (89): sidecar VoiceTTSWorkflow.build_payload ждёт `text` +
+      // `voice` (custom_voice_id), а не `prompt`+`scenario`. Голос
+      // выбирается через ParamsAccordion → draft.params.voice; здесь
+      // переименовываем prompt → text, scenario не шлём (только 'tts').
+      const family = getNodeFamily(meta);
+      const params = family === 'voice'
+        ? { ...defaults, ...draft.params, text: finalPrompt }
+        : { ...defaults, ...draft.params, prompt: finalPrompt, scenario: draft.scenario };
       const out = await api.createJob({ node_id: draft.model_id, params, init_files });
       if (onSubmitted) onSubmitted(out.job_id);
     } catch (e) {

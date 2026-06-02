@@ -102,3 +102,15 @@ export function isRenderableImagePath(p) {
   const ext = String(p).split('.').pop().toLowerCase();
   return RENDERABLE_EXT.has(ext);
 }
+
+// Audio форматы, которые CEF/Chromium 88+ играет в <audio controls>. Список
+// синхронизирован с host.jsx _itemKind() (там же распознаётся для importToBin):
+//   mp3, wav, aac, m4a, ogg, flac, aiff, wma
+// Если sidecar когда-то начнёт раздавать новые расширения — обнови оба места.
+const AUDIO_EXT = new Set(['mp3','wav','aac','m4a','ogg','flac','aiff','wma']);
+
+export function isAudioPath(p) {
+  if (!p) return false;
+  const ext = String(p).split('.').pop().toLowerCase();
+  return AUDIO_EXT.has(ext);
+}

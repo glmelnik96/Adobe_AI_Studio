@@ -8,9 +8,11 @@ import { SlotList } from './SlotList.js';
 import { ParamsAccordion } from './ParamsAccordion.js';
 import { CostBar } from './CostBar.js';
 import { SubmitButton } from './SubmitButton.js';
+import { EnumDropdown } from './EnumDropdown.js';
+import { valueLabel } from '../lib/param_labels.js';
 import {
   listNodesByFamily, getNodeMeta, getNodeFamily,
-  getSlotsForScenario, nodeHasPrompt,
+  getSlotsForScenario, nodeHasPrompt, nodeSupportsEnhancer,
 } from '../lib/slot_schema.js';
 import { saveDraftToStorage, createUploadActions } from '../lib/state.js';
 import { pickFilesFromDisk, readFileAsBlob, makeThumbDataURL } from '../lib/disk.js';
@@ -112,6 +114,14 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
   const scenarios = meta ? meta.scenarios : [];
   const slots = getSlotsForScenario({ videoNodes, nodeId: draft.model_id, scenario: draft.scenario });
   const showPrompt = nodeHasPrompt(meta);
+  const supportsEnhancer = nodeSupportsEnhancer(meta);
+  // Voice: label/placeholder отражают семантику «текст для озвучки», а не
+  // «промпт для модели». Для остальных семейств — дефолты PromptInput'а.
+  const isVoice = family === 'voice';
+  const promptLabel = isVoice ? 'Text' : 'Prompt';
+  const promptPlaceholder = isVoice
+    ? 'Type what should be spoken. Punctuation controls pacing — keep it natural.'
+    : undefined;
 
   useEffect(() => { saveDraftToStorage(draft); }, [JSON.stringify(draft)]);
 
@@ -381,22 +391,51 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
     <div class=${`generate ${disabled ? 'disabled' : ''}`}>
       <${FamilyTabs} value=${family} disabled=${disabled}
         onChange=${f => actions.setFamily(f, { videoNodes })} />
-      <${ModelPicker} nodes=${nodesInFamily} value=${draft.model_id}
-        onChange=${id => actions.setModel(id, { videoNodes })} />
-      <${ScenarioPicker} scenarios=${scenarios} value=${draft.scenario}
-        requiredSlots=${slots}
-        onChange=${s => actions.setScenario(s, { videoNodes })} />
+      ${!isVoice ? html`
+        <${ModelPicker} nodes=${nodesInFamily} value=${draft.model_id}
+          onChange=${id => actions.setModel(id, { videoNodes })} />
+        <${ScenarioPicker} scenarios=${scenarios} value=${draft.scenario}
+          requiredSlots=${slots}
+          onChange=${s => actions.setScenario(s, { videoNodes })} />
+      ` : null}
       ${showPrompt
         ? html`<${PromptInput} draft=${draft} actions=${actions} api=${api}
-                imageRefs=${collectImageRefs(slots, draft.slots)} />`
+                imageRefs=${collectImageRefs(slots, draft.slots)}
+                supportsEnhancer=${supportsEnhancer}
+                label=${promptLabel}
+                placeholder=${promptPlaceholder} />`
         : null}
-      <${SlotList} slots=${slots} values=${draft.slots}
-        onPick=${onPick} onClear=${onClear} />
-      <${ParamsAccordion} defaults=${meta ? meta.default_params : {}}
-        options=${meta ? meta.param_options : {}}
-        values=${draft.params} onChange=${actions.setParam} />
+      ${!isVoice ? html`
+        <${SlotList} slots=${slots} values=${draft.slots}
+          onPick=${onPick} onClear=${onClear} />
+      ` : null}
+      ${isVoice ? html`
+        <${VoicePicker} meta=${meta} value=${draft.params.voice ?? meta.default_params.voice}
+                        onChange=${v => actions.setParam('voice', v)} />
+      ` : html`
+        <${ParamsAccordion} defaults=${meta ? meta.default_params : {}}
+          options=${meta ? meta.param_options : {}}
+          values=${draft.params} onChange=${actions.setParam} />
+      `}
       <${CostBar} snap=${snap} api=${api} store=${store} />
       <${SubmitButton} snap=${snap} api=${api} onSubmitted=${onSubmitted} />
+    </div>
+  `;
+}
+
+// Inline voice-preset picker. Раньше voice жил в ParamsAccordion (Advanced
+// settings, свернут по умолчанию) — но это единственный «параметр» для
+// Voice TTS, и закапывать его в accordion нет смысла. Также показываем
+// человекочитаемые labels (Мужской 1 / Женский 1) вместо raw IDs.
+function VoicePicker({ meta, value, onChange }) {
+  const opts = (meta.param_options.voice.options || []).map(id => ({
+    value: id,
+    label: valueLabel(id),
+  }));
+  return html`
+    <div class="field">
+      <label>Voice</label>
+      <${EnumDropdown} options=${opts} value=${value} onChange=${onChange} />
     </div>
   `;
 }

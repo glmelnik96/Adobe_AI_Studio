@@ -17,6 +17,7 @@ from app.workflows.video_kling import KlingWorkflow
 from app.workflows.video_kling_motion import KlingMotionWorkflow
 from app.workflows.video_kling_omni import KlingOmniWorkflow
 from app.workflows.video_seedance import SeedanceWorkflow
+from app.workflows.voice_tts import VoiceTTSWorkflow
 
 NODES: dict[int, type[Workflow]] = {
     94: ImageGenWorkflow,        # Nano Banana (Gemini Image API)
@@ -27,6 +28,7 @@ NODES: dict[int, type[Workflow]] = {
     121: KlingOmniWorkflow,      # Kling Omni 3 pro
     124: KlingMotionWorkflow,    # Kling Motion v3 pro
     87: TopazUpscaleWorkflow,    # Topaz Video Upscale (V1.2: General/PROB4 only)
+    89: VoiceTTSWorkflow,        # ElevenLabs TTS (V1.2: 6 фикс. голосов)
 }
 
 NODE_NAMES: dict[int, str] = {
@@ -38,4 +40,5 @@ NODE_NAMES: dict[int, str] = {
     121: "Kling Omni 3 pro",
     124: "Kling Motion v3 pro",
     87: "Topaz Video Upscale",
+    89: "Voice (ElevenLabs)",
 }

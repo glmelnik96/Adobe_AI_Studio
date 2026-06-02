@@ -5,6 +5,7 @@ import { FAMILIES } from '../lib/slot_schema.js';
 //   Image    — Nano Banana (94) / GPT Image (98)        [t2i / i2i]
 //   Video    — Kling / Seedance / Kling Omni / Motion   [t2v / i2v / v2v]
 //   Upscale  — Topaz Video Upscale (87)                 [v→hi-res v]
+//   Voice    — ElevenLabs TTS (89)                      [text→mp3]
 //
 // Сабмоды (t2i vs i2i, t2v vs i2v vs v2v) сразу выбираются ScenarioPicker'ом
 // — отдельные таб-табы для них раздуют UI без пользы.
@@ -13,12 +14,14 @@ const FAMILY_LABELS = {
   image: 'Image',
   video: 'Video',
   upscale: 'Upscale',
+  voice: 'Voice',
 };
 
 const FAMILY_TITLES = {
   image: 'Text→Image / Image→Image (Nano Banana, GPT Image)',
   video: 'Text→Video / Image→Video / Video→Video (Kling, Seedance, Omni, Motion)',
   upscale: 'Video upscale (Topaz)',
+  voice: 'Text→Speech, 6 fixed voices (ElevenLabs)',
 };
 
 export function FamilyTabs({ value, onChange, disabled }) {

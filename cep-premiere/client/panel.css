@@ -146,6 +146,7 @@ button.primary-soft:hover:not(:disabled) { background: var(--accent); color: #ff
 .job-status { font-size: 11px; margin-top: 4px; }
 .job-error { font-size: 11px; color: var(--red); margin-top: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .job-thumb { display: block; max-width: 100%; margin-top: 6px; border-radius: 2px; }
+.job-audio { display: block; width: 100%; margin-top: 6px; height: 30px; }
 .job-actions { display: flex; gap: 4px; margin-top: 8px; align-items: center; flex-wrap: wrap; }
 .job-actions button { font-size: 11px; padding: 3px 8px; }
 .job-menu { position: relative; margin-left: auto; }

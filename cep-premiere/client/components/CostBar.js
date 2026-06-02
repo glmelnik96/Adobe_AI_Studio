@@ -2,7 +2,7 @@ import { html } from '../lib/html.js';
 import { useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import { makeCostKey } from '../lib/state.js';
 import { validateDraft } from '../lib/validation.js';
-import { getNodeMeta } from '../lib/slot_schema.js';
+import { getNodeMeta, getNodeFamily } from '../lib/slot_schema.js';
 
 const DEBOUNCE_MS = 600;
 
@@ -33,9 +33,15 @@ export function CostBar({ snap, api, store }) {
         // стейл-цену когда юзер не тронул дропдаун.
         const meta = getNodeMeta({ videoNodes, nodeId: draft.model_id });
         const defaults = (meta && meta.default_params) || {};
+        // Voice (89): backend ждёт text (не prompt). Зеркалим маппинг
+        // SubmitButton'а, иначе preview-cost падает 400 ("missing 'text'").
+        const family = getNodeFamily(meta);
+        const params = family === 'voice'
+          ? { ...defaults, ...draft.params, text: draft.prompt }
+          : { ...defaults, ...draft.params, prompt: draft.prompt };
         const out = await api.previewCost({
           node_id: draft.model_id,
-          params: { ...defaults, ...draft.params, prompt: draft.prompt },
+          params,
         });
         if (inFlight.current !== key) return;  // a newer draft superseded us
         store.set({ cost: { key, price: out.price ?? out.credits ?? null, loading: false, error: null } });

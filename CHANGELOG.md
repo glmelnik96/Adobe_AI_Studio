@@ -1,9 +1,46 @@
 # Changelog
 
-## V1.2-WIP — ветка `feat/history-ux-and-dropdown-fixes`
+## V1.3 — 2026-06-02
 
-Серия UX-фиксов и одна архитектурная починка прогресса. Релизного тега ещё
-нет; всё накатывается прямо на ветке. Релевантные коммиты: `e510421`, `cda87d3`.
+Релиз, выходящий сразу после V1.1 (v1.2 не публиковался — все его наработки
+накопились здесь). Главное: новое семейство **Voice** (ElevenLabs TTS, 6
+фикс. голосов), серия UX-фиксов истории и dropdown'ов, починка прогресса
+(synth-fallback + реальный backend-progress в JobState).
+
+### Voice family (node 89 — ElevenLabs TTS)
+
+- **`sidecar/app/workflows/voice_tts.py`** — новый workflow для backend-ноды
+  89 (`Phygital Creator/phygc-rnd-elevenlabs-api-tts`). 6 захардкоженных
+  пресетов (3F `calm_female_narration` + 3M `well_rounded_male_news`), у
+  каждого жёсткая связка `custom_voice_id → (voice_id-bucket, seed)`;
+  меняется только текст озвучки. `model_id=eleven_v3`, `task_type=text_to_speech`.
+  Поток зеркалирует image_gen: submit → config_history → poll → S3 mp3.
+  Регистрация в `app/workflows/__init__.py` (NODES[89]).
+- **Top-level UI taxonomy расширена до 4 семейств**: `Image / Video / Upscale / Voice`.
+  `cep-premiere/client/lib/slot_schema.js` получил `VOICE_TTS_META` +
+  `nodeSupportsEnhancer()` (false для voice/upscale — enhancer Gemini
+  обучен под image/video, для речи бесполезен или вредит). `FamilyTabs`
+  показывает Voice-табу, `PromptInput` — текст с placeholder'ом
+  `"Type what should be spoken. Punctuation controls pacing"` и без
+  ✨ Enhance toggle. `SubmitButton` + `CostBar` мапят `prompt → text`
+  только для voice family (`build_payload(text=, voice=)`). `JobCard`
+  рендерит `<audio controls preload="metadata">` для `.mp3/.wav/.aac/.m4a/...`
+  через новый `disk_save.isAudioPath()`; `App.js retry` восстанавливает
+  text из `params.text`.
+- **Voice-tab UI rework**: для voice family скрыты Model/Scenario dropdown'ы
+  (избыточные — только одна модель, один сценарий `tts`) и SlotList
+  (нет файловых входов). `voice` вынесен из Advanced settings в основную
+  форму как inline `VoicePicker` (GenerateTab.js). В дропдауне вместо
+  raw IDs (`5XtIMNJwnXd6fKINOwVx`) — человекочитаемые `Женский 1..3 /
+  Мужской 1..3` через расширенный `VALUE_LABELS` (param_labels.js).
+- **Тесты**: sidecar `tests/test_voice_tts_build_payload.py` (parametrized
+  6 voices, bit-for-bit match с recon-captures HAR), `test_voice_tts_config.py`
+  (config_history: null→"" для previous_text/next_text/language_code,
+  `isFixedSeed: True` на seed, taskSchema равно submit-payload'у). CEP
+  `tests/lib/voice_schema.test.js` (VOICE_TTS_META invariants, family
+  routing, prompt/enhancer matrix, isAudioPath). `scenarios.test.js`
+  обновлён под `FAMILIES.length === 4`. 28 + 15 новых тестов, ничего
+  в существующих 110 + 232 не сломано.
 
 ### Sidecar (`/sidecar/`)
 

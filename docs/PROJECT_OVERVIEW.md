@@ -19,8 +19,8 @@
 
 Две независимые CEP-панели для Adobe (Premiere Pro и After Effects) + локальный
 Python sidecar. Цель — запускать генерации (Nano Banana, Kling, Sora,
-Seedance, Kling Omni, Kling Motion и т.д.) прямо из Adobe и автоматически
-класть результат на таймлайн / в композицию.
+Seedance, Kling Omni, Kling Motion, Topaz upscale, ElevenLabs TTS и т.д.)
+прямо из Adobe и автоматически класть результат на таймлайн / в композицию.
 
 **Почему нельзя ходить из CEP напрямую в backend:**
 
@@ -55,6 +55,10 @@ sidecar/                       FastAPI приложение на 127.0.0.1:8765
       video_seedance.py        node 100
       video_kling_omni.py      node 121
       video_kling_motion.py    node 124
+      topaz_upscale.py         Topaz Video Upscale (node 87)
+      voice_tts.py             ElevenLabs TTS (node 89, 6 фикс. голосов)
+      gemini_text.py           Gemini Text — prompt enhancer (node 72)
+      gpt_image.py             GPT Image (node 98)
     routers/
       health.py                /health
       auth.py                  /auth/recon

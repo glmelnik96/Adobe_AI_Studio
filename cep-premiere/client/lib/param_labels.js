@@ -21,6 +21,7 @@ export const PARAM_LABELS = {
   generate_audio:         'Generate audio',
   keep_original_sound:    'Keep original sound',
   character_orientation:  'Orient character by',
+  voice:                  'Voice',
 };
 
 // One-line description for each param — surfaced via title= tooltip and
@@ -119,6 +120,16 @@ export const VALUE_LABELS = {
   // character_orientation
   video: 'Driving video',
   image: 'Character image',
+
+  // Voice TTS (node 89, ElevenLabs). Связка ID → label дублирует
+  // VOICE_TTS_META.voice_presets (gender + index). При смене 6 голосов в
+  // sidecar's VOICE_PRESETS — обнови оба места.
+  rv5jQF81clh7R2mBDAEQ: 'Женский 1',
+  VywPjF0ZYksZDGdTC7uq: 'Женский 2',
+  '5XtIMNJwnXd6fKINOwVx': 'Женский 3',
+  ZCDuYlmjTQwFnocCyTs2: 'Мужской 1',
+  JThzojXplQThwzu1NRgA: 'Мужской 2',
+  '7yMNQpvLyzVR4bsoniZg': 'Мужской 3',
 };
 
 export function paramLabel(name) {

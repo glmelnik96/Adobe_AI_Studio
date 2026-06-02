@@ -210,7 +210,8 @@ export function App({ store, api }) {
                 const restored = {
                   model_id: job.node_id,
                   scenario: jp.scenario || 'start_prompt',
-                  prompt: jp.prompt || jp.text_prompt || '',
+                  // Voice (node 89) хранит текст в jp.text вместо prompt.
+                  prompt: jp.prompt || jp.text_prompt || jp.text || '',
                   slots: {}, // user re-picks files (we only kept paths server-side)
                   params: { ...jp },
                 };
@@ -220,6 +221,7 @@ export function App({ store, api }) {
                 delete restored.params._init_files;
                 delete restored.params.prompt;
                 delete restored.params.text_prompt;
+                delete restored.params.text;
                 store.set({ draft: restored });
                 setTab('generate');
                 toast.success('Form restored — re-pick files and submit');

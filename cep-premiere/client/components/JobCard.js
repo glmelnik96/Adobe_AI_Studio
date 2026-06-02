@@ -1,8 +1,8 @@
 import { html } from '../lib/html.js';
 import { useState, useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import { fmtDuration, jobAgeMs } from '../lib/format.js';
-import { NANO_BANANA_META } from '../lib/slot_schema.js';
-import { localPathToFileUrl, isRenderableImagePath } from '../lib/disk_save.js';
+import { NANO_BANANA_META, GPT_IMAGE_META, TOPAZ_META, VOICE_TTS_META } from '../lib/slot_schema.js';
+import { localPathToFileUrl, isRenderableImagePath, isAudioPath } from '../lib/disk_save.js';
 import { toast } from '../lib/toast.js';
 
 const STATUS_CLS = {
@@ -22,6 +22,9 @@ const SCENARIO_LABELS = {
 
 function modelLabel(node_id, videoNodes) {
   if (node_id === NANO_BANANA_META.node_id) return NANO_BANANA_META.model;
+  if (node_id === GPT_IMAGE_META.node_id) return GPT_IMAGE_META.model;
+  if (node_id === TOPAZ_META.node_id) return TOPAZ_META.model;
+  if (node_id === VOICE_TTS_META.node_id) return VOICE_TTS_META.model;
   const m = (videoNodes || []).find(n => n.node_id === node_id);
   return m ? m.model : `node ${node_id}`;
 }
@@ -48,14 +51,15 @@ export function JobCard({ job, videoNodes, onAction }) {
   const params = job.params || {};
   const scenario = params.scenario || params.scenario_value;
   const scenLabel = SCENARIO_LABELS[scenario] || scenario;
-  const prompt = params.prompt || params.text_prompt || '';
+  // params.text — для node 89 (Voice TTS), хранится отдельно от prompt.
+  const prompt = params.prompt || params.text_prompt || params.text || '';
   const model = modelLabel(job.node_id, videoNodes);
   const isDone = job.status === 'completed';
   const isFailed = job.status === 'failed' || job.status === 'canceled';
   // Retry показываем для completed/failed/canceled — любой завершённый job
   // (где есть сохранённые params) может быть переиспользован как шаблон.
   // Не показываем для queued/running/etc — там пользователь и так ждёт.
-  const canRetry = (isDone || isFailed) && (params.prompt || params.text_prompt || params.scenario);
+  const canRetry = (isDone || isFailed) && (params.prompt || params.text_prompt || params.text || params.scenario);
   const [promptExpanded, setPromptExpanded] = useState(false);
 
   async function copyPrompt() {
@@ -122,6 +126,11 @@ export function JobCard({ job, videoNodes, onAction }) {
       ${(() => {
         // Приоритет blob > file://. После reload blob мёртв, но localPath из
         // persisted кэша → file://. Video-форматы не пытаемся отрендерить.
+        // Audio (Voice TTS) — <audio controls>, плеер с tap-to-play.
+        if (job.localPath && isAudioPath(job.localPath)) {
+          return html`<audio class="job-audio" controls preload="metadata"
+                              src=${localPathToFileUrl(job.localPath)} />`;
+        }
         if (job.resultBlobUrl) {
           return html`<img class="job-thumb" src=${job.resultBlobUrl} alt="" />`;
         }

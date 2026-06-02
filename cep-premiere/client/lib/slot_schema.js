@@ -82,21 +82,62 @@ export const TOPAZ_META = {
   },
 };
 
+// Source: sidecar/app/workflows/voice_tts.py (node 89, ElevenLabs TTS).
+// V1.2: 6 фиксированных голосов (3F + 3M), каждый = связка
+// (custom_voice_id, voice_id-bucket, seed). UI шлёт только `voice` —
+// sidecar разворачивает в 3-поле и блокирует seed (isFixedSeed).
+// `text` приходит в inputs[0].value (не в prompt-ноде enhancer'а).
+export const VOICE_TTS_META = {
+  node_id: 89,
+  model: 'Voice (ElevenLabs)',
+  slots: {},  // нет file-input'ов: только text + voice-enum
+  scenarios: ['tts'],
+  scenario_slots: { tts: [] },
+  default_params: {
+    voice: 'rv5jQF81clh7R2mBDAEQ',  // female #1 (calm_female_narration)
+  },
+  param_options: {
+    voice: { kind: 'enum', options: [
+      // female (calm_female_narration)
+      'rv5jQF81clh7R2mBDAEQ',
+      'VywPjF0ZYksZDGdTC7uq',
+      '5XtIMNJwnXd6fKINOwVx',
+      // male (well_rounded_male_news)
+      'ZCDuYlmjTQwFnocCyTs2',
+      'JThzojXplQThwzu1NRgA',
+      '7yMNQpvLyzVR4bsoniZg',
+    ] },
+  },
+  // UI-метаданные для preset-picker'а. gender-bucket — для группировки
+  // F/M в превью; index — порядковый номер в группе (1-3).
+  voice_presets: [
+    { id: 'rv5jQF81clh7R2mBDAEQ', gender: 'female', index: 1 },
+    { id: 'VywPjF0ZYksZDGdTC7uq', gender: 'female', index: 2 },
+    { id: '5XtIMNJwnXd6fKINOwVx', gender: 'female', index: 3 },
+    { id: 'ZCDuYlmjTQwFnocCyTs2', gender: 'male',   index: 1 },
+    { id: 'JThzojXplQThwzu1NRgA', gender: 'male',   index: 2 },
+    { id: '7yMNQpvLyzVR4bsoniZg', gender: 'male',   index: 3 },
+  ],
+};
+
 // Family — top-level UI taxonomy. Topaz отдельно от Video, потому что не
 // принимает prompt и не участвует в VideoScenario (post-processing).
-export const FAMILIES = ['image', 'video', 'upscale'];
+// Voice — тоже отдельно: input — текст-озвучка (не prompt-to-video text),
+// output — audio (mp3), enhancer не применим.
+export const FAMILIES = ['image', 'video', 'upscale', 'voice'];
 
 export function getNodeFamily(meta) {
   if (!meta) return null;
   if (meta.node_id === 94 || meta.node_id === 98) return 'image';
   if (meta.node_id === 87) return 'upscale';
+  if (meta.node_id === 89) return 'voice';
   return 'video';  // 74/100/121/124 и любая будущая видео-нода
 }
 
 export function getNodeMeta({ videoNodes, nodeId }) {
   // videoNodes-override имеет приоритет: тесты используют это, чтобы
   // подмешать кастомный node_id=94 без чтения hardcoded'а; в проде
-  // ноды 94/98/87 в /nodes/video не приходят, так что fallback ниже
+  // ноды 94/98/87/89 в /nodes/video не приходят, так что fallback ниже
   // отрабатывает естественно.
   if (videoNodes) {
     const found = videoNodes.find(n => n.node_id === nodeId);
@@ -105,6 +146,7 @@ export function getNodeMeta({ videoNodes, nodeId }) {
   if (nodeId === 94) return NANO_BANANA_META;
   if (nodeId === 98) return GPT_IMAGE_META;
   if (nodeId === 87) return TOPAZ_META;
+  if (nodeId === 89) return VOICE_TTS_META;
   return null;
 }
 
@@ -112,6 +154,7 @@ export function listAllNodes({ videoNodes }) {
   const out = [NANO_BANANA_META, GPT_IMAGE_META];
   if (videoNodes) out.push(...videoNodes);
   out.push(TOPAZ_META);
+  out.push(VOICE_TTS_META);
   return out;
 }
 
@@ -120,6 +163,7 @@ export function listNodesByFamily({ videoNodes, family }) {
   if (family === 'image') return [NANO_BANANA_META, GPT_IMAGE_META];
   if (family === 'video') return videoNodes ? [...videoNodes] : [];
   if (family === 'upscale') return [TOPAZ_META];
+  if (family === 'voice') return [VOICE_TTS_META];
   return [];
 }
 
@@ -136,9 +180,21 @@ export function getSlotsForScenario({ videoNodes, nodeId, scenario }) {
   });
 }
 
-// «У этой ноды есть промпт?» — Topaz отвечает false, всё остальное true.
-// Используется в UI чтобы спрятать PromptInput + ✨ Enhance toggle для upscale.
+// «У этой ноды есть текстовый ввод?» — Topaz отвечает false (чистый upscale).
+// Voice — да: пользователь вводит текст для озвучки (поле draft.prompt,
+// но семантически это `text`, а не «prompt for image/video»).
+// Используется в UI чтобы спрятать PromptInput для upscale.
 export function nodeHasPrompt(meta) {
   if (!meta) return false;
   return getNodeFamily(meta) !== 'upscale';
+}
+
+// «У этой ноды есть ✨ Enhance prompt-toggle?» — нет для Topaz (нет текста
+// вообще) и для Voice (enhancer обучен под image/video-промпты — для
+// разговорного текста его подсказки в лучшем случае бесполезны, в худшем
+// сломают пунктуацию/паузы, важные для ElevenLabs TTS).
+export function nodeSupportsEnhancer(meta) {
+  if (!meta) return false;
+  const family = getNodeFamily(meta);
+  return family !== 'upscale' && family !== 'voice';
 }

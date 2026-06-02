@@ -6,6 +6,9 @@ import { toast } from '../lib/toast.js';
 const PLACEHOLDER =
   'Describe the result. Example: «handheld dolly-in on a red vintage car at sunset, dust kicked up by the wheels, cinematic.»';
 
+const VOICE_PLACEHOLDER =
+  'Type what should be spoken. Punctuation controls pacing — keep it natural.';
+
 // V1.2: ✨ Enhance preview-and-confirm flow.
 //
 // Toggle OFF → стандартное поведение: что юзер набрал, то и уйдёт в /jobs.
@@ -17,12 +20,17 @@ const PLACEHOLDER =
 // Любая правка исходного prompt'а или смена model_id сбрасывает preview
 // (см. setPrompt / setModel в lib/state.js) — UI это видит по
 // `isEnhancedFresh(draft) === false` и просит юзера re-enhance.
-export function PromptInput({ draft, actions, api, imageRefs }) {
+export function PromptInput({ draft, actions, api, imageRefs, supportsEnhancer = true, label = 'Prompt', placeholder }) {
   const [enhancing, setEnhancing] = useState(false);
   const value = draft.prompt || '';
   const len = value.length;
-  const enhanceOn = !!draft.enhance_prompt;
+  // Если для этой ноды enhancer не поддерживается (Voice/Topaz) — toggle
+  // в UI просто скрыт, но draft.enhance_prompt в state мог сохраниться от
+  // прошлой ноды. Принудительно считаем OFF, чтобы не блокировать submit
+  // через needsEnhancePreview.
+  const enhanceOn = supportsEnhancer && !!draft.enhance_prompt;
   const fresh = isEnhancedFresh(draft);
+  const effectivePlaceholder = placeholder || PLACEHOLDER;
 
   async function onEnhanceClick() {
     if (enhancing) return;
@@ -62,13 +70,14 @@ export function PromptInput({ draft, actions, api, imageRefs }) {
   return html`
     <div class="field prompt-field">
       <label>
-        Prompt
+        ${label}
         <span class="field-meta">${len ? `${len} chars` : 'required'}</span>
       </label>
       <textarea rows="3" value=${value}
                 onInput=${e => actions.setPrompt(e.target.value)}
-                placeholder=${PLACEHOLDER}></textarea>
+                placeholder=${effectivePlaceholder}></textarea>
 
+      ${supportsEnhancer ? html`
       <div class="enhance-row">
         <label class="enhance-toggle" title="Run the prompt through a model-tuned enhancer (Gemini Text) before submit.">
           <input type="checkbox" checked=${enhanceOn}
@@ -84,6 +93,7 @@ export function PromptInput({ draft, actions, api, imageRefs }) {
           </button>
         ` : null}
       </div>
+      ` : null}
 
       ${enhanceOn && draft.enhanced_error ? html`
         <div class="enhance-err">Enhance error: ${draft.enhanced_error}</div>
