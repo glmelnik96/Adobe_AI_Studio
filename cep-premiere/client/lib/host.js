@@ -48,6 +48,8 @@ export const host = {
   getTimelineFrameSource: () => call('getTimelineFrameSource'),    // source-relative phead + media path
   getTimelineInOutSource: () => call('getTimelineInOutSource'),    // source-relative seq In/Out + media path
   getSourceInOut:         () => call('getSourceInOut'),            // Source Monitor In/Out (kept as legacy)
+  getSelectedClipSource:  () => call('getSelectedClipSource'),     // selected timeline clip → source-relative in/out
+  insertToTimeline:       (projectItemId, atSec = -1) => call('insertToTimeline', projectItemId, atSec),
   importToBin:            (path) => call('importToBin', path),
   revealInBin:            (projectItemId) => call('revealInBin', projectItemId),
   diagApis:               () => call('diagApis'),

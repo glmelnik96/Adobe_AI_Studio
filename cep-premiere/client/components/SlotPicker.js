@@ -60,6 +60,10 @@ export function SlotPicker({ name, kind, max, value, onPick, onClear }) {
                 onClick=${() => onPick && onPick('bin')}>From bin</button>
         <button title=${fromTimelineTitle}
                 onClick=${() => onPick && onPick(fromTimelineSource)}>${fromTimelineLabel}</button>
+        ${videoSlot ? html`
+          <button title="Use the clip selected on the timeline — exactly the segment as it lies in the sequence (no In/Out marks needed)"
+                  onClick=${() => onPick && onPick('selected_clip')}>Selected clip</button>
+        ` : null}
       </div>
       ${items.length === 0
         ? html`<div class="slot-empty">Nothing picked yet — choose a source above.</div>`

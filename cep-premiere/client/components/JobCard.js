@@ -170,7 +170,9 @@ export function JobCard({ job, videoNodes, onAction }) {
       })()}
       <div class="job-actions">
         ${isDone ? html`
-          <button class="primary-soft" onClick=${() => onAction('show', job)}>Show in bin</button>
+          <button class="primary-soft" title="Drop the result onto a free track above at the playhead"
+                  onClick=${() => onAction('insert', job)}>To timeline</button>
+          <button onClick=${() => onAction('show', job)}>Show in bin</button>
           <button onClick=${() => onAction('download', job)}>Download</button>
         ` : null}
         ${canRetry

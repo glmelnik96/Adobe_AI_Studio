@@ -5,6 +5,8 @@
 //   getSourceMonitorItem()
 //   exportTimelineFrame()        — JPG из активной sequence на playhead'е
 //   getSourceInOut()              — клип в Source Monitor + его In/Out marks
+//   getSelectedClipSource()       — выделенный клип таймлайна → source in/out
+//   insertToTimeline(projectItemId, atSec) — вставка на свободный трек выше
 //   importToBin(path)
 //   revealInBin(projectItemId)
 //   diagApis()                    — диагностика доступных API (для debug)
@@ -854,6 +856,207 @@ function getTimelineInOutSource() {
       seqOut: seqOut,
       attempts: attempts,
     });
+  } catch (e) { return _err('exception', String(e) + ' | ' + attempts.join(' | ')); }
+}
+
+// Возвращает source-relative in/out + путь к исходнику для ВЫДЕЛЕННОГО
+// видео-клипа на таймлайне (Higgsfield-паттерн "process selected clip").
+// В отличие от getTimelineInOutSource не требует выставленных In/Out марок —
+// диапазон = ровно тот отрезок исходника, который лежит на таймлайне.
+// Если выделено несколько — берём самый верхний (track-wise), затем самый
+// ранний. Выделение читаем через clip.isSelected() — оно живёт независимо
+// от фокуса панели (в отличие от bin-селекции).
+function getSelectedClipSource() {
+  var attempts = [];
+  try {
+    var seq = app.project.activeSequence;
+    if (!seq) return _err('no_active_sequence');
+
+    var found = null;
+    // Сверху вниз: videoTracks[n-1] = верхний V_n. Первый найденный на более
+    // верхнем треке побеждает; внутри трека — более ранний start.
+    for (var t = seq.videoTracks.numTracks - 1; t >= 0 && !found; t--) {
+      var trk = seq.videoTracks[t];
+      if (!trk) continue;
+      for (var c = 0; c < trk.clips.numItems; c++) {
+        var cl = trk.clips[c];
+        try { if (!cl.isSelected()) continue; } catch (e) { continue; }
+        if (!found || Number(cl.start.seconds) < Number(found.clip.start.seconds)) {
+          found = { trackIdx: t, clip: cl };
+        }
+      }
+    }
+    if (!found) return _err('no_selection', 'select a clip on the timeline first');
+    attempts.push('selected:V' + (found.trackIdx + 1) + ':' + String(found.clip.name));
+
+    var pi = found.clip.projectItem;
+    if (!pi) return _err('no_project_item');
+    var srcPath = _mediaPath(pi);
+    if (!srcPath) return _err('no_media_path');
+
+    var clipStart = Number(found.clip.start.seconds);
+    var clipEnd = Number(found.clip.end.seconds);
+    var inSrc = found.clip.inPoint ? _ptToSec(found.clip.inPoint) : 0;
+    if (isNaN(inSrc)) inSrc = 0;
+    var outSrc;
+    if (found.clip.outPoint) {
+      outSrc = _ptToSec(found.clip.outPoint);
+      if (isNaN(outSrc)) outSrc = inSrc + (clipEnd - clipStart);
+    } else {
+      outSrc = inSrc + (clipEnd - clipStart);
+    }
+    if (!(outSrc > inSrc)) return _err('invalid_range', 'in=' + inSrc + ' out=' + outSrc);
+
+    return _ok({
+      path: srcPath,
+      inSec: inSrc,
+      outSec: outSrc,
+      clipName: String(found.clip.name || pi.name),
+      kind: _itemKind(pi),
+      timelineStartSec: clipStart,
+      trackIdx: found.trackIdx,
+      attempts: attempts,
+    });
+  } catch (e) { return _err('exception', String(e) + ' | ' + attempts.join(' | ')); }
+}
+
+// Вставка ProjectItem на таймлайн активной sequence (Higgsfield-паттерн
+// "result drops onto the timeline"). Кладём на первый СВОБОДНЫЙ трек НАД
+// самым верхним занятым в точке вставки — это UX «тестируй на дубль-треке»:
+// исходник остаётся нетронутым, результат ложится сверху. atSec < 0 (или
+// не число) → playhead.
+//
+// overwriteClip предпочтительнее insertClip: insert сдвигает последующие
+// клипы трека (ripple), overwrite — нет. Трек выбираем заранее свободный,
+// так что overwrite ничего не затирает. Сигнатуры разнятся по билдам Pr
+// (Time object vs seconds number) — перебираем оба варианта с attempts-логом.
+function insertToTimeline(projectItemId, atSec) {
+  var attempts = [];
+  try {
+    var seq = app.project.activeSequence;
+    if (!seq) return _err('no_active_sequence');
+    var pi = _findProjectItemById(projectItemId);
+    if (!pi) return _err('not_found', 'projectItemId=' + projectItemId);
+
+    var t0 = Number(atSec);
+    if (isNaN(t0) || t0 < 0) {
+      var ph = seq.getPlayerPosition && seq.getPlayerPosition();
+      t0 = ph ? Number(ph.seconds) : 0;
+      attempts.push('at=playhead:' + t0);
+    } else {
+      attempts.push('at=' + t0);
+    }
+
+    // Audio-результаты (Voice TTS) кладём на audioTracks, остальное — на video.
+    var kind = _itemKind(pi);
+    var lanes = (kind === 'audio') ? seq.audioTracks : seq.videoTracks;
+
+    // Длительность вставляемого медиа — чтобы проверять перекрытие диапазоном,
+    // а не точкой. Для статичных картинок Pr подставит default still duration,
+    // у ProjectItem.getDuration() в этом случае обычно 0 → берём 5s допуск.
+    var durSec = 0;
+    try {
+      if (pi.getDuration) {
+        var d = pi.getDuration();
+        durSec = d ? Number(d.seconds != null ? d.seconds : d) : 0;
+        if (isNaN(durSec)) durSec = 0;
+      }
+    } catch (e) { attempts.push('dur:' + String(e)); }
+    if (!(durSec > 0)) durSec = 5;
+    var t1 = t0 + durSec;
+
+    function trackFreeAt(trk) {
+      try {
+        for (var c = 0; c < trk.clips.numItems; c++) {
+          var cl = trk.clips[c];
+          var s = Number(cl.start.seconds);
+          var e2 = Number(cl.end.seconds);
+          if (s < t1 && e2 > t0) return false;  // overlap
+        }
+        return true;
+      } catch (e) { return false; }
+    }
+
+    // Самый верхний занятый трек в точке вставки.
+    var topUsed = -1;
+    for (var t = lanes.numTracks - 1; t >= 0; t--) {
+      if (!trackFreeAt(lanes[t])) { topUsed = t; break; }
+    }
+    // Первый свободный НАД ним.
+    var target = -1;
+    for (var u = topUsed + 1; u < lanes.numTracks; u++) {
+      var cand = lanes[u];
+      var locked = false;
+      try { locked = cand.isLocked && cand.isLocked(); } catch (e) {}
+      if (!locked && trackFreeAt(cand)) { target = u; break; }
+    }
+    if (target < 0) {
+      return _err('no_free_track',
+        'all ' + lanes.numTracks + ' ' + kind + '-tracks busy/locked at ' +
+        t0.toFixed(2) + 's — add a track (Sequence > Add Tracks) or move the playhead');
+    }
+    attempts.push('target=' + (kind === 'audio' ? 'A' : 'V') + (target + 1));
+
+    var trk2 = lanes[target];
+    // (method × time-form) перебор. Только НЕдвусмысленные формы: Time-объект
+    // (канонический документированный тип) и seconds number. Ticks-СТРОКУ
+    // сознательно не используем: билд, трактующий её как секунды, молча
+    // вставил бы клип на позицию ~80000 часов.
+    var timeForms = [{ tag: 'sec', val: t0 }];
+    try {
+      var tObj = new Time();
+      tObj.seconds = t0;
+      timeForms.unshift({ tag: 'Time', val: tObj });
+    } catch (e) { attempts.push('Time_ctor:' + String(e)); }
+
+    // После вставки верифицируем позицию: новый клип обязан накрывать t0
+    // (с допуском в 0.5s на frame-snapping). Если клип появился, но улетел
+    // не туда — формат времени истолкован неверно; откатываем и пробуем
+    // следующую форму.
+    function newClipNear(trk, before) {
+      if (trk.clips.numItems <= before) return null;
+      var cl = trk.clips[trk.clips.numItems - 1];
+      var s = Number(cl.start.seconds);
+      var e2 = Number(cl.end.seconds);
+      if (s - 0.5 <= t0 && t0 < e2 + 0.5) return cl;
+      return cl ? { misplaced: true, clip: cl, at: s } : null;
+    }
+
+    var methods = ['overwriteClip', 'insertClip'];
+    for (var m = 0; m < methods.length; m++) {
+      var meth = methods[m];
+      if (typeof trk2[meth] !== 'function') {
+        attempts.push(meth + ':not_function');
+        continue;
+      }
+      for (var f = 0; f < timeForms.length; f++) {
+        var tf = timeForms[f];
+        var label = meth + '[' + tf.tag + ']';
+        try {
+          var before = trk2.clips.numItems;
+          trk2[meth](pi, tf.val);
+          var got = newClipNear(trk2, before);
+          if (got && !got.misplaced) {
+            attempts.push(label + ':ok');
+            return _ok({
+              trackLabel: (kind === 'audio' ? 'A' : 'V') + (target + 1),
+              atSec: t0,
+              attempts: attempts,
+            });
+          }
+          if (got && got.misplaced) {
+            attempts.push(label + ':misplaced_at=' + got.at.toFixed(2));
+            try { got.clip.remove(false, false); attempts.push(label + ':rolled_back'); }
+            catch (er) { attempts.push(label + ':rollback_failed:' + String(er).slice(0, 60)); }
+            continue;
+          }
+          attempts.push(label + ':no_new_clip');
+        } catch (e) {
+          attempts.push(label + ':' + String(e).replace(/[\r\n]+/g, ' ').slice(0, 80));
+        }
+      }
+    }
+    return _err('insert_failed', 'attempts=' + attempts.join(' | '));
   } catch (e) { return _err('exception', String(e) + ' | ' + attempts.join(' | ')); }
 }
 

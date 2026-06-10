@@ -221,31 +221,47 @@ export function App({ store, api }) {
                 a.click();
                 setTimeout(() => { try { URL.revokeObjectURL(a.href); } catch (_) {} }, 1000);
               }
+              // Если панель перезагружалась после completion — projectItemId
+              // пропал. Импортируем «по требованию» (скачиваем артефакт →
+              // saveBlob → importToBin). Общий шаг для 'show' и 'insert'.
+              async function ensureImported() {
+                let pid = job.projectItemId;
+                if (pid) return pid;
+                if (!job.localPath) {
+                  const blob = await api.downloadJob(job.job_id, 0);
+                  const ext = mimeToExt(blob.type);
+                  job.localPath = await saveBlobToDisk(blob, `${job.job_id}.${ext}`);
+                }
+                const rImp = await hostQueued('importToBin', job.localPath);
+                pid = rImp.projectItemId;
+                const s = store.get();
+                store.set({
+                  jobs: s.jobs.map(x => x.job_id === job.job_id
+                    ? { ...x, projectItemId: pid, localPath: job.localPath } : x),
+                });
+                try { patchJobMetaCache(job.job_id, { localPath: job.localPath, projectItemId: pid }); } catch (_) {}
+                return pid;
+              }
               if (action === 'show') {
                 try {
-                  // Если панель перезагружалась после completion — projectItemId
-                  // пропал. Импортируем «по требованию» (скачиваем артефакт →
-                  // saveBlob → importToBin) и потом reveal.
-                  let pid = job.projectItemId;
-                  if (!pid) {
-                    if (!job.localPath) {
-                      const blob = await api.downloadJob(job.job_id, 0);
-                      const ext = mimeToExt(blob.type);
-                      job.localPath = await saveBlobToDisk(blob, `${job.job_id}.${ext}`);
-                    }
-                    const rImp = await hostQueued('importToBin', job.localPath);
-                    pid = rImp.projectItemId;
-                    const s = store.get();
-                    store.set({
-                      jobs: s.jobs.map(x => x.job_id === job.job_id
-                        ? { ...x, projectItemId: pid, localPath: job.localPath } : x),
-                    });
-                    try { patchJobMetaCache(job.job_id, { localPath: job.localPath, projectItemId: pid }); } catch (_) {}
-                  }
+                  const pid = await ensureImported();
                   const r = await hostQueued('revealInBin', pid);
                   toast.success(r.binName ? `Selected in bin "${r.binName}"` : 'Selected in project');
                 } catch (e) {
                   toast.error('Show in bin failed: ' + _importFailReason(e, job.localPath));
+                }
+              }
+              if (action === 'insert') {
+                try {
+                  const pid = await ensureImported();
+                  const r = await hostQueued('insertToTimeline', pid, -1);
+                  toast.success(`Placed on ${r.trackLabel} at playhead`);
+                } catch (e) {
+                  const code = e && e.result && e.result.error;
+                  const reason = (e && e.result && e.result.reason) || e.message || 'unknown';
+                  toast.error(code === 'no_free_track'
+                    ? 'No free track above at the playhead — add a track or move the playhead'
+                    : 'Insert failed: ' + _importFailReason(e, job.localPath) + (code === 'insert_failed' ? ` (${String(reason).slice(0, 120)})` : ''));
                 }
               }
               if (action === 'retry') {

@@ -91,6 +91,8 @@ function friendlyHostError(e) {
     no_selection: 'Select an item in the Project bin first' +
                   (reason ? ' (debug: ' + String(reason).slice(0, 120) + ')' : ''),
     no_clip_at_playhead: 'Move the playhead over a video/image clip in the active sequence',
+    no_free_track: 'No free track at the insert point' + (reason ? ' — ' + reason : ''),
+    insert_failed: 'Timeline insert failed' + (reason ? ' — ' + String(reason).slice(0, 160) : ''),
     no_clip_at_range: 'No clip under the Timeline In/Out marks (or playhead if no marks)',
     no_project_item: 'Clip under playhead has no linked project item',
     no_media_path: 'Clip media path is empty (offline / merged clip?)',
@@ -303,6 +305,55 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
         }
         const displayName = `${io.clipName || 'clip'}_${Number(io.inSec).toFixed(2)}-${Number(io.outSec).toFixed(2)}.mp4`;
         await ingestPath(slot, clip.path, 'timeline_io', displayName);
+        return;
+      }
+
+      // 3a) Video-only: «Selected clip» — выделенный на таймлайне клип, ровно
+      //     тот отрезок исходника, что лежит в sequence (inPoint..outPoint).
+      //     Не требует In/Out марок — Higgsfield-паттерн "process selected clip".
+      if (source === 'selected_clip') {
+        if (!isVideoSlot) {
+          toast.warning('Selected clip works only for video slots');
+          return;
+        }
+        let io;
+        try {
+          io = await host.getSelectedClipSource();
+        } catch (e) {
+          // eslint-disable-next-line no-console
+          console.error('[getSelectedClipSource]', e.result || e);
+          const code = e && e.result && e.result.error;
+          toast.error('Selected clip: ' + (code === 'no_selection'
+            ? 'Click a video clip on the timeline first'
+            : friendlyHostError(e)));
+          return;
+        }
+        // Guard: выделенная картинка/титр на таймлайне ушла бы в /clip-video
+        // и дала бы невнятную ffmpeg-ошибку. kind приходит из host.jsx.
+        if (io.kind && io.kind !== 'video') {
+          toast.warning('Selected clip is not a video — select a video clip on the timeline');
+          return;
+        }
+        // eslint-disable-next-line no-console
+        console.log('[selected_clip] path=', io.path, 'in=', io.inSec, 'out=', io.outSec, 'clipName=', io.clipName);
+        let clip;
+        try {
+          clip = await api.clipVideo({
+            source_path: io.path,
+            in_sec: Number(io.inSec),
+            out_sec: Number(io.outSec),
+          });
+        } catch (e) {
+          const detail = (e.body && e.body.detail) || {};
+          // eslint-disable-next-line no-console
+          console.error('[clipVideo selected_clip] detail:', detail, 'path was:', io.path);
+          const reason = detail.hint || detail.reason || detail.error || e.message || 'unknown';
+          const extra = detail.suffix ? ` [suffix=${detail.suffix}]` : '';
+          toast.error('ffmpeg clip failed: ' + reason + extra);
+          return;
+        }
+        const displayName = `${io.clipName || 'clip'}_${Number(io.inSec).toFixed(2)}-${Number(io.outSec).toFixed(2)}.mp4`;
+        await ingestPath(slot, clip.path, 'selected_clip', displayName);
         return;
       }
 
