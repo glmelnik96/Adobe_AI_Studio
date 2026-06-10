@@ -6,7 +6,7 @@ export function JobList({ jobs, api, videoNodes, onAction }) {
   const sorted = [...jobs].sort((a, b) => (b.created_at || '').localeCompare(a.created_at || ''));
   return html`
     <div class="job-list">
-      ${sorted.map(j => html`<${JobCard} job=${j} api=${api} videoNodes=${videoNodes} onAction=${onAction} />`)}
+      ${sorted.map(j => html`<${JobCard} key=${j.job_id} job=${j} api=${api} videoNodes=${videoNodes} onAction=${onAction} />`)}
     </div>
   `;
 }

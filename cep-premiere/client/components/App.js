@@ -6,7 +6,7 @@ import { GenerateTab } from './GenerateTab.js';
 import { HistoryTab } from './HistoryTab.js';
 import { QueueWidget } from './QueueWidget.js';
 import { ToastStack } from './Toast.js';
-import { createDraftActions, makeInitialDraft, loadDraftFromStorage, mergeJobs, diffJobs, patchJobMetaCache, dropJobMetaCache, reconcileJobMetaCache } from '../lib/state.js';
+import { createDraftActions, makeInitialDraft, loadDraftFromStorage, mergeJobs, diffJobs, patchJobMetaCache, dropJobMetaCache, reconcileJobMetaCache, jobsPollInterval, flushDraftSave } from '../lib/state.js';
 import { saveBlobToDisk, mimeToExt } from '../lib/disk_save.js';
 import { hostQueued } from '../lib/host.js';
 import { toast } from '../lib/toast.js';
@@ -21,6 +21,8 @@ export function App({ store, api }) {
   useEffect(() => {
     let cancelled = false;
     async function tick() {
+      // Панель скрыта (другая вкладка workspace) — не дёргаем sidecar.
+      if (typeof document !== 'undefined' && document.hidden === true) return;
       try {
         const h = await api.getHealth();
         if (cancelled) return;
@@ -72,9 +74,16 @@ export function App({ store, api }) {
       .catch(() => {});
   }, [snap.health.status, snap.videoNodes]);
 
-  // Job polling — 2s tick when sidecar online
+  // Job polling — adaptive setTimeout-цепочка вместо setInterval:
+  //  - активные джобы → 1s (быстрее ловим completion → быстрее auto-import);
+  //  - idle → 5s;
+  //  - document.hidden → тики скипаются, на visibilitychange тикаем сразу;
+  //  - in-flight guard: медленный тик (download внутри) не накладывается
+  //    на следующий (setInterval это позволял).
   useEffect(() => {
     let cancelled = false;
+    let timer = null;
+    let inFlight = false;
     async function tick() {
       if (store.get().health.status !== 'online') return;
       try {
@@ -83,7 +92,8 @@ export function App({ store, api }) {
         const cur = store.get().jobs || [];
         const remote = r.jobs || [];
         const { completedNow } = diffJobs(cur, remote);
-        store.set({ jobs: mergeJobs(cur, remote) });
+        const merged = mergeJobs(cur, remote);
+        if (merged !== cur) store.set({ jobs: merged });
         // Сборка мусора в localStorage: чистим метаданные удалённых на сервере джобов.
         try { reconcileJobMetaCache(remote.map(j => j.job_id)); } catch (_) {}
         // Auto-download + auto-import for completed ones we haven't processed yet
@@ -125,9 +135,44 @@ export function App({ store, api }) {
         }
       } catch (_) { /* sidecar might be flaky; health toast covers it */ }
     }
-    tick();
-    const id = setInterval(tick, 2000);
-    return () => { cancelled = true; clearInterval(id); };
+    async function guardedTick() {
+      if (inFlight) return;
+      inFlight = true;
+      try { await tick(); } finally { inFlight = false; }
+    }
+    function isHidden() {
+      return typeof document !== 'undefined' && document.hidden === true;
+    }
+    function loop() {
+      if (cancelled) return;
+      timer = setTimeout(async () => {
+        if (!isHidden()) await guardedTick();
+        loop();
+      }, jobsPollInterval(store.get().jobs));
+    }
+    function onVisibility() {
+      if (!isHidden()) guardedTick();
+    }
+    guardedTick();
+    loop();
+    if (typeof document !== 'undefined' && document.addEventListener) {
+      document.addEventListener('visibilitychange', onVisibility);
+    }
+    return () => {
+      cancelled = true;
+      if (timer) clearTimeout(timer);
+      if (typeof document !== 'undefined' && document.removeEventListener) {
+        document.removeEventListener('visibilitychange', onVisibility);
+      }
+    };
+  }, []);
+
+  // Flush отложенного draft-сохранения при выгрузке панели (debounce 800ms
+  // иначе может потерять последние правки промпта при reload).
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.addEventListener) return undefined;
+    window.addEventListener('beforeunload', flushDraftSave);
+    return () => window.removeEventListener('beforeunload', flushDraftSave);
   }, []);
 
   const actions = createDraftActions(store);

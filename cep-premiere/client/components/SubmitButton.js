@@ -20,7 +20,7 @@ function friendlyValidationError(err) {
   return err.message;
 }
 
-export function SubmitButton({ snap, api, onSubmitted }) {
+export function SubmitButton({ snap, api, store, onSubmitted }) {
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
   const { draft, videoNodes, health, cost, balance } = snap;
@@ -91,6 +91,26 @@ export function SubmitButton({ snap, api, onSubmitted }) {
         ? { ...defaults, ...draft.params, text: finalPrompt }
         : { ...defaults, ...draft.params, prompt: finalPrompt, scenario: draft.scenario };
       const out = await api.createJob({ node_id: draft.model_id, params, init_files });
+      // Optimistic UI: сразу кладём job в store — QueueWidget/History видят
+      // его мгновенно, не дожидаясь следующего poll-тика. Следующий poll
+      // заменит запись серверной (mergeJobs: server fields побеждают).
+      if (store && out && out.job_id) {
+        const s = store.get();
+        if (!(s.jobs || []).some(j => j.job_id === out.job_id)) {
+          const now = new Date().toISOString();
+          store.set({
+            jobs: [...(s.jobs || []), {
+              job_id: out.job_id,
+              node_id: draft.model_id,
+              status: out.status || 'queued',
+              progress: 0,
+              params,
+              created_at: out.created_at || now,
+              updated_at: out.updated_at || now,
+            }],
+          });
+        }
+      }
       if (onSubmitted) onSubmitted(out.job_id);
     } catch (e) {
       setErr(e.message || 'submit failed');

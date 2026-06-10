@@ -14,7 +14,7 @@ import {
   listNodesByFamily, getNodeMeta, getNodeFamily,
   getSlotsForScenario, nodeHasPrompt, nodeSupportsEnhancer,
 } from '../lib/slot_schema.js';
-import { saveDraftToStorage, createUploadActions } from '../lib/state.js';
+import { saveDraftToStorageDebounced, createUploadActions } from '../lib/state.js';
 import { pickFilesFromDisk, readFileAsBlob, makeThumbDataURL } from '../lib/disk.js';
 import { host, hostQueued } from '../lib/host.js';
 import { toast } from '../lib/toast.js';
@@ -123,7 +123,9 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
     ? 'Type what should be spoken. Punctuation controls pacing — keep it natural.'
     : undefined;
 
-  useEffect(() => { saveDraftToStorage(draft); }, [JSON.stringify(draft)]);
+  // Debounce 800ms: иначе каждый keystroke промпта = синхронный
+  // stringify+localStorage.setItem. Flush на beforeunload — в App.js.
+  useEffect(() => { saveDraftToStorageDebounced(draft); }, [JSON.stringify(draft)]);
 
   // Auto-fill image slot from active clip. Триггерится один раз на сценарий —
   // пока сценарий не меняется, ничего не делаем (даже если юзер очистил
@@ -199,6 +201,7 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
         const accept = isVideoSlot ? VIDEO_EXTS : (isImageSlot ? IMAGE_EXTS : []);
         const paths = await pickFilesFromDisk({ multi: slot.kind === 'array', accept });
         if (!paths || paths.length === 0) return;
+        const valid = [];
         for (const p of paths) {
           const ext = extOf(p);
           if (isImageSlot && !IMAGE_EXTS.includes(ext)) {
@@ -209,8 +212,11 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
             toast.warning(`Slot "${slot.name}" needs a video, got .${ext || '?'}`);
             continue;
           }
-          await ingestPath(slot, p, 'disk');
+          valid.push(p);
         }
+        // Параллельно: read→thumb→upload каждого файла независим; раньше
+        // multi-pick из 5 файлов грузился строго последовательно.
+        await Promise.all(valid.map(p => ingestPath(slot, p, 'disk')));
         return;
       }
 
@@ -347,6 +353,7 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
       if (!pickResult) return;
 
       const items = pickResult.items || (pickResult.item ? [pickResult.item] : []);
+      const validItems = [];
       for (const it of items) {
         // Двойная проверка: host.kind + расширение пути. host._itemKind может
         // вернуть 'unknown' для редкого формата — тогда полагаемся на ext.
@@ -365,8 +372,9 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           toast.warning(`Slot "${slot.name}" needs a video, got ${it.kind || ext || '?'}`);
           continue;
         }
-        await ingestPath(slot, it.path, source, it.name);
+        validItems.push(it);
       }
+      await Promise.all(validItems.map(it => ingestPath(slot, it.path, source, it.name)));
     } catch (e) {
       // eslint-disable-next-line no-console
       console.error('[onPick]', source, e.result || e);
@@ -418,7 +426,7 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
           values=${draft.params} onChange=${actions.setParam} />
       `}
       <${CostBar} snap=${snap} api=${api} store=${store} />
-      <${SubmitButton} snap=${snap} api=${api} onSubmitted=${onSubmitted} />
+      <${SubmitButton} snap=${snap} api=${api} store=${store} onSubmitted=${onSubmitted} />
     </div>
   `;
 }

@@ -17,7 +17,7 @@ from typing import Any
 from loguru import logger
 
 from app.phygital_client.models import GenerationJob
-from app.workflows.base import Workflow, _normalize_progress
+from app.workflows.base import Workflow, _normalize_progress, poll_delay
 
 
 PENDING_STATUSES = {
@@ -50,13 +50,8 @@ class VideoWorkflow(Workflow):
         raise NotImplementedError
 
     async def submit(self, payload: dict[str, Any]) -> str:
-        # Опционально: запросить цену (для meta.taskPrice в config_history)
-        try:
-            self._last_price = await self.client.get_credits_price(payload)
-        except Exception as e:
-            logger.warning(f"price lookup failed (non-fatal): {e}")
-
-        task_id = await self.client.submit_task(payload)
+        # Цена (для meta.taskPrice в config_history) + submit — параллельно
+        task_id = await self._price_and_submit(payload, payload)
         logger.info(f"{self.NODE_NAME}: submitted task_id={task_id}")
 
         config = self._build_config(**self._last_args)
@@ -80,6 +75,7 @@ class VideoWorkflow(Workflow):
         last_progress: float | None = None
         running_started_at: float | None = None
         logged_first = False
+        poll_i = 0
 
         while loop.time() < deadline:
             data = await self.client.task_status(task_id)
@@ -134,7 +130,8 @@ class VideoWorkflow(Workflow):
             if status and status not in PENDING_STATUSES:
                 logger.warning(f"Unknown status '{status}', treating as pending")
 
-            await asyncio.sleep(poll_interval)
+            await asyncio.sleep(poll_delay(poll_i, poll_interval))
+            poll_i += 1
 
         return GenerationJob(job_id=job_id, status="failed", error="timeout")
 

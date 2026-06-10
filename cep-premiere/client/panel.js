@@ -3,7 +3,7 @@ import { html } from './lib/html.js';
 import { createApi } from './lib/api.js';
 import { store } from './lib/state.js';
 import { App } from './components/App.js';
-import { ensureSidecar, stopSpawnedSidecar } from './lib/autostart.js';
+import { ensureSidecarWithRetry, stopSpawnedSidecar } from './lib/autostart.js';
 import { sidecarAuthHeader } from './lib/sidecar_token.js';
 
 // `getAuthHeaders` is called per-request (not once at boot) so that if the
@@ -19,7 +19,9 @@ render(html`<${App} store=${store} api=${api} />`, document.getElementById('root
 
 // Fire-and-forget: the health useEffect in <App> will pick up the sidecar
 // once /health responds. We don't await — panel UI stays responsive.
-ensureSidecar().catch(() => {});
+// Retry-обёртка: первый spawn после ребута может упасть (AV-скан python.exe),
+// до 3 попыток с backoff.
+ensureSidecarWithRetry().catch(() => {});
 
 // Kill the sidecar we spawned when the user closes Pr (or unloads the panel).
 // `beforeunload` covers DevTools reloads + panel close; CSXS

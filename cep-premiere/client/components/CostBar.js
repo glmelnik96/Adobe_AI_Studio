@@ -26,7 +26,16 @@ export function CostBar({ snap, api, store }) {
 
     const t = setTimeout(async () => {
       inFlight.current = key;
-      store.set({ cost: { key, price: null, loading: true, error: null } });
+      // Не сбрасываем прошлую цену на время refetch — UI показывает её
+      // приглушённой с «…» вместо мерцания «Estimating cost…».
+      store.set(s => ({
+        cost: {
+          key,
+          price: (s.cost && typeof s.cost.price === 'number') ? s.cost.price : null,
+          loading: true,
+          error: null,
+        },
+      }));
       try {
         // Мержим defaults: cost preview должен считать ровно ту цену,
         // которая будет на submit (см. SubmitButton). Иначе пилл показывает
@@ -59,6 +68,10 @@ export function CostBar({ snap, api, store }) {
   // когда price > 100 credits / balance недостаточен.
   if (!v.ok) return null;
   if (cost.loading && cost.key === key) {
+    // Есть прошлая цена — показываем её dimmed с «…», без скачков layout'а.
+    if (typeof cost.price === 'number') {
+      return html`<div class="cost"><span class="cost-stale">~${cost.price} credits …</span></div>`;
+    }
     return html`<div class="cost"><span class="cost-stale">Estimating cost…</span></div>`;
   }
   if (cost.error && cost.key === key) {

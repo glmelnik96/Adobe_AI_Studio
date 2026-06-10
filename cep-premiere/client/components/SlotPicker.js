@@ -72,6 +72,7 @@ export function SlotPicker({ name, kind, max, value, onPick, onClear }) {
                 ${it.asset && it.asset.width ? `${it.asset.width}×${it.asset.height}` : ''}
                 ${it.cached ? html`<span class="slot-cached">cached</span>` : ''}
                 ${it.error ? html`<span class="slot-err" title=${it.error}>upload failed</span>` : ''}
+                ${!it.asset && !it.error ? html`<span class="slot-uploading">Uploading…</span>` : ''}
               </div>
             </div>
             <button class="slot-remove" title="Remove" onClick=${() => onClear && onClear(it)}>×</button>

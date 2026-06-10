@@ -25,7 +25,7 @@ from loguru import logger
 
 from app.phygital_client.api import PhygitalClient
 from app.phygital_client.models import GenerationJob
-from app.workflows.base import Workflow, _normalize_progress
+from app.workflows.base import Workflow, _normalize_progress, poll_delay
 
 NODE_GLOBAL_ID = "Phygital Creator/phygc-rnd-elevenlabs-api-tts"
 NODE_NAME = "Sound Creation"
@@ -208,19 +208,14 @@ class VoiceTTSWorkflow(Workflow):
 
     # ── API calls ─────────────────────────────────────────────────────────
     async def submit(self, payload: dict[str, Any]) -> str:
-        try:
-            price_payload = {
-                "id": WORKFLOW_SCHEMA_ID,
-                "inputs": [{"name": "text", "value": "", "type": "text", "meta": {}}],
-                "params": self._params_list(),
-                "outputs": [],
-            }
-            self._last_price = await self.client.get_credits_price(price_payload)
-            logger.debug(f"price: {self._last_price.get('price')}")
-        except Exception as e:
-            logger.warning(f"price lookup failed (non-fatal): {e}")
-
-        task_id = await self.client.submit_task(payload)
+        # price (для meta.taskPrice) + submit — параллельно
+        price_payload = {
+            "id": WORKFLOW_SCHEMA_ID,
+            "inputs": [{"name": "text", "value": "", "type": "text", "meta": {}}],
+            "params": self._params_list(),
+            "outputs": [],
+        }
+        task_id = await self._price_and_submit(price_payload, payload)
         logger.info(f"Submitted task_id={task_id}")
 
         config = self._build_config(self._last_text)
@@ -242,6 +237,7 @@ class VoiceTTSWorkflow(Workflow):
         last_progress: float | None = None
         running_started_at: float | None = None
         logged_first = False
+        poll_i = 0
 
         while loop.time() < deadline:
             data = await self.client.task_status(task_id)
@@ -294,7 +290,8 @@ class VoiceTTSWorkflow(Workflow):
             if status and status not in PENDING_STATUSES:
                 logger.warning(f"Unknown status '{status}', treating as pending")
 
-            await asyncio.sleep(poll_interval)
+            await asyncio.sleep(poll_delay(poll_i, poll_interval))
+            poll_i += 1
 
         return GenerationJob(job_id=job_id, status="failed", error="timeout")
 

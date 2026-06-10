@@ -86,6 +86,26 @@ export function saveDraftToStorage(draft) {
   try { localStorage.setItem(DRAFT_LS_KEY, JSON.stringify(draft)); } catch {}
 }
 
+// Debounced-вариант: GenerateTab сохраняет draft на каждый keystroke промпта —
+// это синхронный JSON.stringify+setItem на каждый символ. Trailing debounce
+// 800ms; flushDraftSave() обязателен на beforeunload, чтобы не потерять хвост.
+let _draftSaveTimer = null;
+let _draftPending = null;
+export function saveDraftToStorageDebounced(draft, delayMs = 800) {
+  _draftPending = draft;
+  if (_draftSaveTimer) clearTimeout(_draftSaveTimer);
+  _draftSaveTimer = setTimeout(() => {
+    _draftSaveTimer = null;
+    const d = _draftPending;
+    _draftPending = null;
+    saveDraftToStorage(d);
+  }, delayMs);
+}
+export function flushDraftSave() {
+  if (_draftSaveTimer) { clearTimeout(_draftSaveTimer); _draftSaveTimer = null; }
+  if (_draftPending != null) { saveDraftToStorage(_draftPending); _draftPending = null; }
+}
+
 export function createDraftActions(store) {
   function setDraft(patch) {
     store.set(s => ({ draft: { ...s.draft, ...patch } }));
@@ -262,8 +282,17 @@ export function loadJobMetaCache() {
   try { return JSON.parse(localStorage.getItem(JOB_META_KEY) || '{}') || {}; }
   catch { return {}; }
 }
+let _lastJobMetaJson = null;
 export function saveJobMetaCache(cache) {
-  try { localStorage.setItem(JOB_META_KEY, JSON.stringify(cache)); } catch {}
+  try {
+    const s = JSON.stringify(cache);
+    // Skip-if-unchanged: reconcile/patch дёргаются на каждом poll-тике, и
+    // чаще всего содержимое идентично. Сверяем и с реальным storage — на
+    // случай если его очистили извне (тесты).
+    if (s === _lastJobMetaJson && localStorage.getItem(JOB_META_KEY) === s) return;
+    localStorage.setItem(JOB_META_KEY, s);
+    _lastJobMetaJson = s;
+  } catch {}
 }
 export function patchJobMetaCache(jobId, patch) {
   const c = loadJobMetaCache();
@@ -293,7 +322,46 @@ export function mergeJobs(prev, remote) {
     // persisted re-hydrates after panel reload (когда prevById пуст).
     return { ...persisted, ...(local || {}), ...rj };
   });
+  // Same-reference, если ничего не поменялось: App.js тогда скипает store.set
+  // и Preact не пере-рендерит JobList/QueueWidget на каждом poll-тике.
+  if (prev && _jobsListEqual(prev, out)) return prev;
   return out;
+}
+
+function _jobsListEqual(a, b) {
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i++) {
+    if (!_jobShallowEqual(a[i], b[i])) return false;
+  }
+  return true;
+}
+
+function _jobShallowEqual(x, y) {
+  if (x === y) return true;
+  const kx = Object.keys(x);
+  const ky = Object.keys(y);
+  if (kx.length !== ky.length) return false;
+  for (const k of kx) {
+    const vx = x[k];
+    const vy = y[k];
+    if (vx === vy) continue;
+    // params / result_paths — вложенные структуры с сервера; сервер каждый
+    // раз отдаёт новые объекты, сравниваем по содержимому.
+    if (vx && vy && typeof vx === 'object' && typeof vy === 'object') {
+      if (JSON.stringify(vx) !== JSON.stringify(vy)) return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
+
+// Интервал поллинга /jobs: есть активные джобы → 1s (быстрее ловим completion
+// и auto-import), idle → 5s (не дёргаем sidecar зря). Pure для тестов.
+export const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'pending']);
+export function jobsPollInterval(jobs) {
+  const active = (jobs || []).some(j => ACTIVE_JOB_STATUSES.has(j.status));
+  return active ? 1000 : 5000;
 }
 
 export function diffJobs(prev, remote) {

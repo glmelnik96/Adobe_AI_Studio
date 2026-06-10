@@ -29,6 +29,30 @@ function modelLabel(node_id, videoNodes) {
   return m ? m.model : `node ${node_id}`;
 }
 
+// Lazy-load hook: ставим src миниатюре только когда карточка приближается к
+// viewport (rootMargin 200px). History из 50 джобов иначе декодирует 50
+// изображений сразу. Fallback: нет IntersectionObserver → грузим сразу.
+export function useLazyVisible() {
+  const ref = useRef(null);
+  const [visible, setVisible] = useState(typeof IntersectionObserver === 'undefined');
+  useEffect(() => {
+    if (visible) return undefined;
+    const el = ref.current;
+    if (!el || typeof IntersectionObserver === 'undefined') {
+      setVisible(true);
+      return undefined;
+    }
+    const io = new IntersectionObserver((entries) => {
+      for (const en of entries) {
+        if (en.isIntersecting) { setVisible(true); io.disconnect(); return; }
+      }
+    }, { rootMargin: '200px' });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [visible]);
+  return [ref, visible];
+}
+
 // Click-outside hook for the ⋯ overflow menu.
 function useDismissOnOutside(open, onClose) {
   const ref = useRef(null);
@@ -44,6 +68,7 @@ function useDismissOnOutside(open, onClose) {
 export function JobCard({ job, videoNodes, onAction }) {
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useDismissOnOutside(menuOpen, () => setMenuOpen(false));
+  const [thumbRef, thumbVisible] = useLazyVisible();
 
   const cls = STATUS_CLS[job.status] || 'q';
   const age = fmtDuration(jobAgeMs(job));
@@ -127,15 +152,19 @@ export function JobCard({ job, videoNodes, onAction }) {
         // Приоритет blob > file://. После reload blob мёртв, но localPath из
         // persisted кэша → file://. Video-форматы не пытаемся отрендерить.
         // Audio (Voice TTS) — <audio controls>, плеер с tap-to-play.
+        // Изображения лениво: src ставим только около viewport (useLazyVisible).
         if (job.localPath && isAudioPath(job.localPath)) {
           return html`<audio class="job-audio" controls preload="metadata"
                               src=${localPathToFileUrl(job.localPath)} />`;
         }
-        if (job.resultBlobUrl) {
-          return html`<img class="job-thumb" src=${job.resultBlobUrl} alt="" />`;
-        }
-        if (job.localPath && isRenderableImagePath(job.localPath)) {
-          return html`<img class="job-thumb" src=${localPathToFileUrl(job.localPath)} alt="" />`;
+        const imgSrc = job.resultBlobUrl
+          ? job.resultBlobUrl
+          : (job.localPath && isRenderableImagePath(job.localPath)
+              ? localPathToFileUrl(job.localPath) : null);
+        if (imgSrc) {
+          return html`<div class="job-thumb-wrap" ref=${thumbRef}>
+            ${thumbVisible ? html`<img class="job-thumb" src=${imgSrc} alt="" />` : null}
+          </div>`;
         }
         return null;
       })()}

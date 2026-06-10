@@ -10,11 +10,24 @@ function getCS() {
   return cs;
 }
 
+// ASCII-safe serialization for the evalScript bridge. evalScript передаёт
+// строку через C++ слой CEP, который на Windows мангалит не-ASCII символы
+// (кириллические пути типа C:\Users\Глеб\… приходят в ExtendScript битыми).
+// Эскейпим всё вне printable-ASCII в \uXXXX — JSON-валидно, выживает в любой
+// кодировке. Покрывает и surrogate pairs (эскейпятся по половинкам, что для
+// JSON корректно).
+export function asciiSafeJson(value) {
+  return JSON.stringify(value).replace(
+    /[\u007f-\uffff]/g,
+    (c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0'),
+  );
+}
+
 function call(fnName, ...args) {
   return new Promise((resolve, reject) => {
     const csi = getCS();
     if (!csi) return reject(new Error('CSInterface unavailable'));
-    const argsJs = args.map(a => JSON.stringify(a)).join(', ');
+    const argsJs = args.map(a => asciiSafeJson(a)).join(', ');
     csi.evalScript(`${fnName}(${argsJs})`, (out) => {
       try {
         const parsed = JSON.parse(out);

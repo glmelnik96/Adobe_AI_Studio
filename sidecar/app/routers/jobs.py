@@ -1,7 +1,10 @@
 """/jobs endpoints."""
 from __future__ import annotations
 
+import hashlib
+import json
 import mimetypes
+import time
 from pathlib import Path
 from typing import Any
 
@@ -48,18 +51,47 @@ def _state_to_dict(s: JobState) -> dict:
     }
 
 
+# TTL-кэш для preview-cost: цена зависит только от node_id+params, а UI
+# дёргает endpoint на каждое изменение формы. 60s TTL экономит round-trip
+# к Phygital (~1-2s) при повторных идентичных запросах. Кэшируем только успех.
+_PREVIEW_COST_TTL_S = 60.0
+_preview_cost_cache: dict[str, tuple[float, dict]] = {}
+
+
+def _preview_cost_cache_key(node_id: int, params: dict[str, Any]) -> str:
+    blob = json.dumps({"node_id": node_id, "params": params},
+                      sort_keys=True, default=str, ensure_ascii=False)
+    return hashlib.sha256(blob.encode("utf-8")).hexdigest()
+
+
+def _preview_cost_cache_prune(now: float) -> None:
+    expired = [k for k, (ts, _) in _preview_cost_cache.items()
+               if now - ts >= _PREVIEW_COST_TTL_S]
+    for k in expired:
+        _preview_cost_cache.pop(k, None)
+
+
 @router.post("/jobs/preview-cost")
 async def preview_cost(body: JobCreate, request: Request) -> dict:
     """Подсчитать стоимость генерации без отправки задачи.
 
     Workflow.build_payload(...) → PhygitalClient.get_credits_price(payload).
     init_files игнорируются (для preview Phygital'у нужны только параметры).
+    Результат кэшируется на 60s по (node_id, params).
     """
     if body.node_id not in NODES:
         raise HTTPException(
             status_code=400,
             detail={"error": "unknown_node", "node_id": body.node_id},
         )
+
+    now = time.monotonic()
+    _preview_cost_cache_prune(now)
+    cache_key = _preview_cost_cache_key(body.node_id, body.params)
+    cached = _preview_cost_cache.get(cache_key)
+    if cached is not None and now - cached[0] < _PREVIEW_COST_TTL_S:
+        return cached[1]
+
     workflow_class = NODES[body.node_id]
     get_client = request.app.state.get_client
 
@@ -78,6 +110,7 @@ async def preview_cost(body: JobCreate, request: Request) -> dict:
         price = await client.get_credits_price(payload)
     finally:
         await client.__aexit__(None, None, None)
+    _preview_cost_cache[cache_key] = (time.monotonic(), price)
     return price
 
 

@@ -947,6 +947,27 @@ function _findImportedByPath(targetPath) {
   return null;
 }
 
+// Poll до timeoutMs: ждём пока import материализуется либо в нашем bin'е
+// (numItems вырос), либо где угодно в дереве (Pr иногда игнорирует bin-arg).
+// Шаг адаптивный: первые ~1.2s каждые 60ms (обычный случай — импорт быстрый),
+// дальше 250ms, чтобы не жечь CPU на долгих сетевых/RAW файлах.
+function _pollImported(bin, before, path, timeoutMs) {
+  var deadline = (new Date().getTime()) + timeoutMs;
+  var i = 0;
+  while ((new Date().getTime()) < deadline) {
+    if (bin.children.numItems > before) {
+      return { item: bin.children[bin.children.numItems - 1], binName: 'PhygitalStudio' };
+    }
+    var hit = _findImportedByPath(path);
+    if (hit) {
+      return { item: hit.item, binName: String(hit.parent.name || 'root') };
+    }
+    $.sleep(i < 20 ? 60 : 250);
+    i++;
+  }
+  return null;
+}
+
 function importToBin(path) {
   try {
     var bin = _binByName('PhygitalStudio');
@@ -954,26 +975,17 @@ function importToBin(path) {
     app.project.importFiles([path], true, bin, false);
 
     // importFiles asynchronous-ish: возвращается до того как ProjectItem
-    // появится в bin.children. Poll'им до 8 секунд (шаг 150ms), параллельно
-    // ищем по всему дереву на случай если Pr игнорирует bin-arg и кладёт
-    // в root.
-    var deadline = (new Date().getTime()) + 8000;
-    var pi = null;
-    var foundIn = null;
-    while ((new Date().getTime()) < deadline) {
-      if (bin.children.numItems > before) {
-        pi = bin.children[bin.children.numItems - 1];
-        foundIn = 'PhygitalStudio';
-        break;
-      }
-      var hit = _findImportedByPath(path);
-      if (hit) {
-        pi = hit.item;
-        foundIn = String(hit.parent.name || 'root');
-        break;
-      }
-      $.sleep(150);
+    // появится в bin.children. Первая попытка — до 8s. Если пусто —
+    // повторяем importFiles (Pr изредка молча дропает вызов, особенно
+    // сразу после открытия проекта) и ждём ещё до 7s.
+    var found = _pollImported(bin, before, path, 8000);
+    if (!found) {
+      before = bin.children.numItems;
+      app.project.importFiles([path], true, bin, false);
+      found = _pollImported(bin, before, path, 7000);
     }
+    var pi = found ? found.item : null;
+    var foundIn = found ? found.binName : null;
 
     if (pi) {
       // Прогреваем кэш «по пути» новой записью + сбрасываем мёртвые
@@ -986,7 +998,7 @@ function importToBin(path) {
       });
     }
     return _err('import_failed',
-      'no new item after 8s poll; path=' + path +
+      'no new item after 2 import attempts (8s+7s poll); path=' + path +
       ' bin_before=' + before + ' bin_after=' + bin.children.numItems);
   } catch (e) { return _err('import_failed', String(e) + ' | path=' + path); }
 }

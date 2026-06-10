@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import abc
+import asyncio
 import logging
 from typing import Any, Awaitable, Callable
 
@@ -34,6 +35,25 @@ def _normalize_progress(raw: Any) -> float | None:
     return max(0.0, min(1.0, v))
 
 
+def poll_delay(iteration: int, base_interval: float) -> float:
+    """Адаптивный график поллинга статуса задачи.
+
+    Первые поллы — частые (0.4s): короткие задачи (image ~10-25s) завершаются
+    заметно быстрее, чем при фиксированном 1.5s интервале. Дальше плавно
+    выходим на base_interval, чтобы не бомбить Phygital на долгих видео.
+
+    iteration — номер уже выполненного полла (0-based).
+    base_interval <= 0 (так гоняют тесты) → всегда 0, без задержек.
+    """
+    if base_interval <= 0:
+        return 0.0
+    if iteration < 5:
+        return min(0.4, base_interval)
+    if iteration < 10:
+        return min(0.8, base_interval)
+    return base_interval
+
+
 class Workflow(abc.ABC):
     """Базовый интерфейс: подготовить payload → submit → дождаться результата."""
 
@@ -59,6 +79,33 @@ class Workflow(abc.ABC):
 
     @abc.abstractmethod
     async def wait(self, job_id: str, timeout: float = 300.0) -> GenerationJob: ...
+
+    async def _price_and_submit(
+        self,
+        price_payload: dict[str, Any],
+        submit_payload: dict[str, Any],
+    ) -> Any:
+        """Параллельный price-lookup + submit_task.
+
+        get_credits_price нужен только для meta.taskPrice в config_history и
+        раньше добавлял 1-2s serial latency перед каждым submit. Гоняем оба
+        запроса через gather: submit не ждёт цену, а цена (если успела) всё
+        равно попадает в config_history. Ошибка price — non-fatal, как и было.
+        Возвращает task_id (как вернул submit_task).
+        """
+        async def _price() -> dict[str, Any] | None:
+            try:
+                return await self.client.get_credits_price(price_payload)
+            except Exception as e:
+                logger.warning(f"price lookup failed (non-fatal): {e}")
+                return None
+
+        price, task_id = await asyncio.gather(
+            _price(), self.client.submit_task(submit_payload)
+        )
+        if price is not None:
+            self._last_price = price
+        return task_id
 
     async def run(self, **inputs: Any) -> GenerationJob:
         payload = self.build_payload(**inputs)

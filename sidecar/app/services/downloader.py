@@ -54,8 +54,12 @@ async def download_urls(
     timeout: float = 300.0,
     retries: int = 3,
     retry_delay: float = 1.0,
+    max_concurrency: int = 4,
 ) -> list[Path]:
     """Качает все URL в out_dir. Имена файлов — 0001.<ext>, 0002.<ext>, ...
+
+    URL'ы качаются параллельно (Semaphore(max_concurrency)), порядок
+    результатов соответствует порядку urls.
 
     Returns: список путей сохранённых файлов.
     Raises: DownloadError если хотя бы один URL не скачался после retries.
@@ -67,9 +71,10 @@ async def download_urls(
         kwargs["transport"] = transport
         kwargs.pop("verify")  # MockTransport не использует verify
 
-    results: list[Path] = []
-    async with httpx.AsyncClient(**kwargs) as client:
-        for idx, url in enumerate(urls, start=1):
+    sem = asyncio.Semaphore(max(1, max_concurrency))
+
+    async def _download_one(client: httpx.AsyncClient, idx: int, url: str) -> Path:
+        async with sem:
             for attempt in range(1, retries + 1):
                 try:
                     # Стримим в файл вместо resp.content — видео-файлы от
@@ -103,12 +108,24 @@ async def download_urls(
                             except OSError:
                                 pass
                             raise
-                    results.append(fpath)
-                    break  # success → next url
+                    return fpath
                 except (httpx.HTTPStatusError, httpx.RequestError) as e:
                     if attempt >= retries:
                         raise DownloadError(f"Failed to download {url} after {retries} attempts: {e}") from e
                     delay = retry_delay * (2 ** (attempt - 1))
                     logger.warning(f"download {url}: attempt {attempt}/{retries} failed ({e}); sleep {delay:.1f}s")
                     await asyncio.sleep(delay)
-    return results
+            raise DownloadError(f"Failed to download {url}")  # unreachable
+
+    async with httpx.AsyncClient(**kwargs) as client:
+        # return_exceptions=True — даём всем задачам завершиться до выхода из
+        # client-контекста, затем поднимаем первую ошибку (семантика как у
+        # последовательной версии: одна неудача = DownloadError всего батча).
+        gathered = await asyncio.gather(
+            *(_download_one(client, idx, url) for idx, url in enumerate(urls, start=1)),
+            return_exceptions=True,
+        )
+    for item in gathered:
+        if isinstance(item, BaseException):
+            raise item
+    return list(gathered)  # type: ignore[arg-type]

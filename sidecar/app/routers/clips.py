@@ -54,14 +54,34 @@ _MAC_FFMPEG_FALLBACKS = (
 )
 
 
+def _win_ffmpeg_fallbacks() -> tuple[str, ...]:
+    """Windows fallback locations: sidecar, запущенный из CEP Node.js, может
+    получить урезанный PATH (а MSIX-окружения дополнительно его виртуализируют).
+    Проверяем типовые места установки winget/choco/scoop/ручной distrib."""
+    local = os.environ.get("LOCALAPPDATA", "")
+    userprofile = os.environ.get("USERPROFILE", "")
+    cands = []
+    if local:
+        cands.append(os.path.join(local, "Microsoft", "WinGet", "Links", "ffmpeg.exe"))
+    cands.append(r"C:\ProgramData\chocolatey\bin\ffmpeg.exe")
+    if userprofile:
+        cands.append(os.path.join(userprofile, "scoop", "shims", "ffmpeg.exe"))
+    cands.extend((r"C:\ffmpeg\bin\ffmpeg.exe", r"C:\ffmpeg\ffmpeg.exe"))
+    return tuple(cands)
+
+
 def _resolve_ffmpeg() -> str | None:
-    """shutil.which с Mac-fallback'ом для случая LaunchAgent-минимального PATH."""
+    """shutil.which с платформенными fallback'ами на случай урезанного PATH."""
     found = shutil.which("ffmpeg")
     if found:
         return found
     if sys.platform == "darwin":
         for cand in _MAC_FFMPEG_FALLBACKS:
             if os.path.isfile(cand) and os.access(cand, os.X_OK):
+                return cand
+    elif sys.platform == "win32":
+        for cand in _win_ffmpeg_fallbacks():
+            if os.path.isfile(cand):
                 return cand
     return None
 

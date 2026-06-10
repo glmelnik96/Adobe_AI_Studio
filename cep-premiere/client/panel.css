@@ -82,6 +82,8 @@ button.primary-soft:hover:not(:disabled) { background: var(--accent); color: #ff
 .slot-item-sub { font-size: 10px; color: var(--fg-dim); }
 .slot-cached { display: inline-block; padding: 1px 4px; border-radius: 2px; background: var(--green); color: #000; margin-left: 6px; }
 .slot-err { color: var(--red); margin-left: 6px; }
+.slot-uploading { color: var(--fg-dim); margin-left: 6px; animation: slot-uploading-pulse 1.2s ease-in-out infinite; }
+@keyframes slot-uploading-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
 .slot-remove { background: transparent; border: none; color: var(--fg-dim); font-size: 16px; line-height: 1; padding: 0 6px; }
 .slot-remove:hover { color: var(--red); }
 

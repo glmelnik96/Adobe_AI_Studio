@@ -305,3 +305,22 @@ export async function ensureSidecar({ pollTimeoutMs = 15000, pollIntervalMs = 50
   }
   return { ok: false, reason: 'spawn-timeout' };
 }
+
+// Retry-обёртка над ensureSidecar. Первый запуск после ребута/обновления
+// иногда падает по spawn-timeout (антивирус сканирует python.exe, диск
+// холодный) — повторная попытка обычно успешна. Не ретраим
+// 'cep-node-unavailable' (перманентно: нет Node в манифесте — ждать нечего).
+export async function ensureSidecarWithRetry({ attempts = 3, backoffMs = 2000 } = {}) {
+  let out = null;
+  for (let i = 0; i < attempts; i++) {
+    if (i > 0) await new Promise(r => setTimeout(r, backoffMs * i));
+    try {
+      out = await ensureSidecar();
+    } catch (e) {
+      out = { ok: false, reason: 'error: ' + (e && e.message || e) };
+    }
+    if (out.ok) return out;
+    if (out.reason === 'cep-node-unavailable') return out;
+  }
+  return out;
+}
