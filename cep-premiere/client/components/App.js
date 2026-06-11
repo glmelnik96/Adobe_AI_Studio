@@ -6,7 +6,7 @@ import { GenerateTab } from './GenerateTab.js';
 import { HistoryTab } from './HistoryTab.js';
 import { QueueWidget } from './QueueWidget.js';
 import { ToastStack } from './Toast.js';
-import { createDraftActions, makeInitialDraft, loadDraftFromStorage, mergeJobs, diffJobs, patchJobMetaCache, dropJobMetaCache, reconcileJobMetaCache, jobsPollInterval, flushDraftSave } from '../lib/state.js';
+import { createDraftActions, makeInitialDraft, loadDraftFromStorage, mergeJobs, diffJobs, pickAutoImportJobs, patchJobMetaCache, dropJobMetaCache, loadJobMetaCache, reconcileJobMetaCache, jobsPollInterval, flushDraftSave } from '../lib/state.js';
 import { saveBlobToDisk, mimeToExt } from '../lib/disk_save.js';
 import { hostQueued } from '../lib/host.js';
 import { toast } from '../lib/toast.js';
@@ -84,6 +84,9 @@ export function App({ store, api }) {
     let cancelled = false;
     let timer = null;
     let inFlight = false;
+    // Первый успешный тик — baseline: его completed-джобы пришли из прошлых
+    // сессий, авто-импортировать их нельзя (см. pickAutoImportJobs).
+    let baselineDone = false;
     async function tick() {
       if (store.get().health.status !== 'online') return;
       try {
@@ -96,8 +99,11 @@ export function App({ store, api }) {
         if (merged !== cur) store.set({ jobs: merged });
         // Сборка мусора в localStorage: чистим метаданные удалённых на сервере джобов.
         try { reconcileJobMetaCache(remote.map(j => j.job_id)); } catch (_) {}
-        // Auto-download + auto-import for completed ones we haven't processed yet
-        for (const j of completedNow) {
+        // Auto-download + auto-import — только для джобов, завершившихся
+        // вживую в этой сессии (не baseline, не обработанные ранее).
+        const toImport = pickAutoImportJobs(completedNow, loadJobMetaCache(), !baselineDone);
+        baselineDone = true;
+        for (const j of toImport) {
           if (!j.result_paths || !j.result_paths.length) continue;
           try {
             const blob = await api.downloadJob(j.job_id, 0);

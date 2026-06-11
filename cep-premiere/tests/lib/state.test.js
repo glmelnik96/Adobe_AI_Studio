@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { createStore, DEFAULT_STATE, createDraftActions, makeInitialDraft } from '../../client/lib/state.js';
 import { createUploadActions, isAssetCacheHit } from '../../client/lib/state.js';
-import { diffJobs, mergeJobs } from '../../client/lib/state.js';
+import { diffJobs, mergeJobs, pickAutoImportJobs } from '../../client/lib/state.js';
 
 describe('state draft actions', () => {
   let store, actions;
@@ -87,5 +87,33 @@ describe('jobs reducer', () => {
     const diff = diffJobs(prev, remote);
     expect(diff.completedNow.map(j => j.job_id)).toEqual(['A']);
     expect(diff.newJobs.map(j => j.job_id)).toEqual(['B']);
+  });
+});
+
+// Регрессия: при открытии проекта первый poll-тик видел всю историю sidecar
+// и авто-импортировал до 50 старых генераций в bin каждого проекта.
+describe('pickAutoImportJobs (auto-import policy)', () => {
+  const J = (id) => ({ job_id: id, status: 'completed' });
+
+  it('baseline tick imports nothing — history from previous sessions', () => {
+    expect(pickAutoImportJobs([J('A'), J('B')], {}, true)).toEqual([]);
+  });
+
+  it('post-baseline tick imports fresh completions', () => {
+    const out = pickAutoImportJobs([J('A')], {}, false);
+    expect(out.map(j => j.job_id)).toEqual(['A']);
+  });
+
+  it('skips jobs already processed earlier (localPath in meta cache)', () => {
+    const meta = { A: { localPath: 'C:/out/A.png' }, B: { projectItemId: 'PI-9' } };
+    const out = pickAutoImportJobs([J('A'), J('B'), J('C')], meta, false);
+    // A — обработан (есть localPath) → skip; B — meta без localPath (импорт
+    // когда-то падал) → можно переимпортировать; C — новый.
+    expect(out.map(j => j.job_id)).toEqual(['B', 'C']);
+  });
+
+  it('tolerates null meta and empty list', () => {
+    expect(pickAutoImportJobs([], null, false)).toEqual([]);
+    expect(pickAutoImportJobs(null, null, false)).toEqual([]);
   });
 });

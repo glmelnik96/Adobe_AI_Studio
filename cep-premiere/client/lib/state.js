@@ -224,6 +224,41 @@ export function createDraftActions(store) {
   };
 }
 
+// Применение пресета («только форма»): возвращает draft-патч или ошибку.
+// Pure — UI решает, как показать ошибку (toast) и когда вызывать store.set.
+//  - model_id валидируется против актуальной slot_schema: пресет с нодой,
+//    исчезнувшей из /nodes/video, не должен молча ломать форму;
+//  - scenario сверяется с meta.scenarios (fallback на первый);
+//  - slots всегда очищаются — файлы в пресете не хранятся by design;
+//  - params копируются как есть (per-node ключи сохранены при save).
+export function applyPresetToDraft(preset, { videoNodes }) {
+  if (!preset || typeof preset.model_id !== 'number') {
+    return { ok: false, error: 'bad_preset' };
+  }
+  const meta = getNodeMeta({ videoNodes, nodeId: preset.model_id });
+  if (!meta) return { ok: false, error: 'unknown_model' };
+  const scenarios = meta.scenarios || [];
+  const scenario = scenarios.includes(preset.scenario)
+    ? preset.scenario
+    : (scenarios[0] || null);
+  return {
+    ok: true,
+    draft: {
+      family: getNodeFamily(meta) || preset.family || 'image',
+      model_id: preset.model_id,
+      scenario,
+      prompt: preset.prompt || '',
+      slots: {},
+      params: { ...(preset.params || {}) },
+      enhance_prompt: false,
+      enhanced_prompt: null,
+      enhanced_busy: false,
+      enhanced_error: null,
+      enhanced_for: null,
+    },
+  };
+}
+
 // «Preview всё ещё свежий?» — true, если enhanced_prompt получен ровно
 // под текущие (model_id, prompt). UI использует, чтобы решить, можно ли
 // сабмитить с enhanced-текстом или надо сначала re-enhance.
@@ -362,6 +397,21 @@ export const ACTIVE_JOB_STATUSES = new Set(['queued', 'running', 'pending']);
 export function jobsPollInterval(jobs) {
   const active = (jobs || []).some(j => ACTIVE_JOB_STATUSES.has(j.status));
   return active ? 1000 : 5000;
+}
+
+// Auto-import policy. Баг: при открытии любого проекта первый poll-тик видел
+// всю историю sidecar (она глобальная, не per-project), diffJobs помечал все
+// completed как «новые» и App.js заносил до 50 старых генераций в bin.
+//  - isBaseline (первый успешный тик после маунта панели) → ничего не
+//    импортируем: эти джобы завершились до открытия панели;
+//  - meta-guard: job с localPath в jobMetaCache уже скачивался/импортировался
+//    в прошлой сессии → skip (миниатюра восстановится через mergeJobs).
+// Старые результаты по-прежнему доступны через ленивый ensureImported()
+// («Show in bin» / «To timeline») — но это явный клик юзера.
+export function pickAutoImportJobs(completedNow, meta, isBaseline) {
+  if (isBaseline) return [];
+  const m = meta || {};
+  return (completedNow || []).filter(j => !(m[j.job_id] && m[j.job_id].localPath));
 }
 
 export function diffJobs(prev, remote) {

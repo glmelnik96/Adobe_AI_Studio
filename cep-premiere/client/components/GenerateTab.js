@@ -1,6 +1,7 @@
 import { html } from '../lib/html.js';
 import { useEffect, useRef } from '../vendor/preact-hooks.module.js';
 import { FamilyTabs } from './FamilyTabs.js';
+import { PresetBar } from './PresetBar.js';
 import { ModelPicker } from './ModelPicker.js';
 import { ScenarioPicker } from './ScenarioPicker.js';
 import { PromptInput } from './PromptInput.js';
@@ -448,6 +449,7 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
 
   return html`
     <div class=${`generate ${disabled ? 'disabled' : ''}`}>
+      <${PresetBar} snap=${snap} store=${store} api=${api} />
       <${FamilyTabs} value=${family} disabled=${disabled}
         onChange=${f => actions.setFamily(f, { videoNodes })} />
       ${!isVoice ? html`

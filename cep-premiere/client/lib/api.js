@@ -109,6 +109,16 @@ export function createApi({ fetch, baseUrl, getAuthHeaders }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ source_path, at_sec }),
       }),
+    // Presets — «только форма» (family/model/scenario/prompt/params, без
+    // файлов). POST upsert'ит по имени (case-insensitive) — см. presets.py.
+    listPresets: () => request('/presets'),
+    savePreset: ({ name, family, model_id, scenario, prompt, params }) =>
+      request('/presets', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ name, family, model_id, scenario, prompt, params }),
+      }),
+    deletePreset: (id) => request(`/presets/${encodeURIComponent(id)}`, { method: 'DELETE' }),
     // Disk-cache management — для UI «Очистить asset_uploads/».
     // /assets/disk-usage возвращает {count, total_bytes} (preview перед чисткой).
     // /assets/disk-cache (DELETE) удаляет файлы и возвращает {cleared_count, freed_bytes}.
