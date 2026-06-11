@@ -31,14 +31,16 @@ NODES: dict[int, type[Workflow]] = {
     89: VoiceTTSWorkflow,        # ElevenLabs TTS (V1.2: 6 фикс. голосов)
 }
 
+# Видео-ноды названы по СЕМЕЙСТВУ без версии: версия движка — параметр
+# (model_name/model), синхронизировано с NODE_MODEL_LABEL в video_common.py.
 NODE_NAMES: dict[int, str] = {
     94: "Nano Banana",
     98: "GPT Image",
     72: "Gemini text",
-    74: "Kling v3 pro",
-    100: "Seedance 2.0 p720",
-    121: "Kling Omni 3 pro",
-    124: "Kling Motion v3 pro",
+    74: "Kling",
+    100: "Seedance",
+    121: "Kling Omni",
+    124: "Kling Motion",
     87: "Topaz Video Upscale",
     89: "Voice (ElevenLabs)",
 }

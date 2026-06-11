@@ -10,6 +10,7 @@ const STATUS_CLS = {
 };
 
 const SCENARIO_LABELS = {
+  t2v:                    'Text → video',
   start_prompt:           'Start frame + prompt',
   start_end_prompt:       'Start + end frame',
   ref_prompt:             'Reference + prompt',

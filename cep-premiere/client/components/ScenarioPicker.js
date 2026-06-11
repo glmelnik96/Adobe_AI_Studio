@@ -5,6 +5,7 @@ import { EnumDropdown } from './EnumDropdown.js';
 // Friendly labels for the VideoScenario enum (sidecar/app/workflows/video_common.py).
 // Raw values (e.g. "ref_prompt_video") are too cryptic for users picking a flow.
 const SCENARIO_LABELS = {
+  t2v:                    'Text → video (prompt only)',
   start_prompt:           'Start frame + prompt',
   start_end_prompt:       'Start + end frame + prompt',
   ref_prompt:             'Reference image + prompt',

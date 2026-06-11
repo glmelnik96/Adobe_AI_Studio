@@ -1,5 +1,8 @@
 import { describe, it, expect } from 'vitest';
-import { getNodeMeta, getSlotsForScenario, NANO_BANANA_META } from '../../client/lib/slot_schema.js';
+import {
+  getNodeMeta, getSlotsForScenario, getVersionParam,
+  NANO_BANANA_META, GPT_IMAGE_META, TOPAZ_META,
+} from '../../client/lib/slot_schema.js';
 
 const VIDEO_NODES_FIXTURE = [
   {
@@ -49,5 +52,46 @@ describe('slot_schema', () => {
   it('getSlotsForScenario returns [] for unknown scenario', () => {
     const slots = getSlotsForScenario({ videoNodes: VIDEO_NODES_FIXTURE, nodeId: 74, scenario: 'nonsense' });
     expect(slots).toEqual([]);
+  });
+});
+
+describe('getVersionParam', () => {
+  it('picks model_name for Kling-style video nodes', () => {
+    const meta = {
+      node_id: 74, model: 'Kling',
+      default_params: { model_name: 'kling_v3', mode: 'pro' },
+      param_options: {
+        model_name: { kind: 'enum', options: ['kling_v2_6', 'kling_v3'] },
+        mode: { kind: 'enum', options: ['std', 'pro'] },
+      },
+    };
+    expect(getVersionParam(meta)).toEqual({
+      name: 'model_name', options: ['kling_v2_6', 'kling_v3'],
+    });
+  });
+
+  it('picks model for Seedance-style nodes (no model_name)', () => {
+    const meta = {
+      node_id: 100, model: 'Seedance',
+      default_params: { model: 'v_2_0' },
+      param_options: { model: { kind: 'enum', options: ['lite', 'pro', 'v_2_0'] } },
+    };
+    expect(getVersionParam(meta).name).toBe('model');
+  });
+
+  it('Nano Banana (94) promotes model_name', () => {
+    expect(getVersionParam(NANO_BANANA_META).name).toBe('model_name');
+  });
+
+  it('single-option enum is NOT a version choice (GPT Image version=[v2])', () => {
+    expect(getVersionParam(GPT_IMAGE_META)).toBeNull();
+  });
+
+  it('nodes without version-like params return null (Topaz)', () => {
+    expect(getVersionParam(TOPAZ_META)).toBeNull();
+  });
+
+  it('null meta returns null', () => {
+    expect(getVersionParam(null)).toBeNull();
   });
 });

@@ -134,11 +134,17 @@ NODE_DEFAULT_PARAMS: dict[int, dict[str, Any]] = {
 }
 
 
+# UI-метки нод — нейтральные имена СЕМЕЙСТВ. Нода Phygital = обёртка API
+# семейства, а версия движка — это ПАРАМЕТР (model_name у 74, model у
+# 100/121/124), который юзер выбирает отдельным Version-дропдауном.
+# Хардкодить версию в метку нельзя: она начинает врать, когда юзер меняет
+# параметр. NODE_NAME в классах workflow'ов не трогаем — это контракт
+# payload'а Phygital.
 NODE_MODEL_LABEL: dict[int, str] = {
-    74: "Kling v3 pro",
-    100: "Seedance 2.0 p720",
-    121: "Kling Omni 3 pro",
-    124: "Kling Motion v3 pro",
+    74: "Kling",
+    100: "Seedance",
+    121: "Kling Omni",
+    124: "Kling Motion",
 }
 
 

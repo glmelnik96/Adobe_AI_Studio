@@ -180,6 +180,25 @@ export function getSlotsForScenario({ videoNodes, nodeId, scenario }) {
   });
 }
 
+// «Версия движка» ноды. Нода Phygital = семейство API (Kling, Seedance...),
+// а конкретная версия модели — обычный enum-параметр (model_name у 74/94,
+// model у 100/121/124). Раньше он жил в Advanced settings и противоречил
+// захардкоженной в label версии («Kling v3 pro» + model_name=kling_v1).
+// Теперь label нейтральный, а версия — отдельный дропдаун под Model.
+// Возвращает { name, options } или null (одна опция = выбора нет).
+const VERSION_PARAM_KEYS = ['model_name', 'model', 'version'];
+
+export function getVersionParam(meta) {
+  if (!meta || !meta.param_options) return null;
+  for (const name of VERSION_PARAM_KEYS) {
+    const opt = meta.param_options[name];
+    if (opt && opt.kind === 'enum' && Array.isArray(opt.options) && opt.options.length > 1) {
+      return { name, options: opt.options };
+    }
+  }
+  return null;
+}
+
 // «У этой ноды есть текстовый ввод?» — Topaz отвечает false (чистый upscale).
 // Voice — да: пользователь вводит текст для озвучки (поле draft.prompt,
 // но семантически это `text`, а не «prompt for image/video»).

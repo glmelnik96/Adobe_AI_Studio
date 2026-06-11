@@ -56,9 +56,25 @@ function ParamField({ name, value, opt, onChange }) {
   `;
 }
 
-export function ParamsAccordion({ defaults, options, values, onChange }) {
+// Какие параметры показывать в Advanced. Прячем:
+//  - exclude (версия движка — у неё свой дропдаун под Model в GenerateTab);
+//  - enum'ы с одной опцией (выбора нет — мёртвый дропдаун, напр. GPT Image
+//    version=['v2']); дефолт всё равно уйдёт в payload через SubmitButton.
+export function visibleParamKeys(defaults, options, exclude) {
+  const skip = new Set(exclude || []);
+  return Object.keys(defaults || {}).filter(k => {
+    if (skip.has(k)) return false;
+    const opt = (options || {})[k];
+    if (opt && opt.kind === 'enum' && Array.isArray(opt.options) && opt.options.length <= 1) {
+      return false;
+    }
+    return true;
+  });
+}
+
+export function ParamsAccordion({ defaults, options, values, onChange, exclude }) {
   const [open, setOpen] = useState(false);
-  const keys = Object.keys(defaults || {});
+  const keys = visibleParamKeys(defaults, options, exclude);
   if (keys.length === 0) return null;
   return html`
     <div class="params">

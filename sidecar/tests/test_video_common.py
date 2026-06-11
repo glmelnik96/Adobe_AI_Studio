@@ -20,6 +20,23 @@ def test_all_nodes_have_defaults_and_label():
         assert node_id in NODE_MODEL_LABEL
 
 
+def test_labels_are_neutral_family_names():
+    """UI-метки нод — семейства БЕЗ версии: версия движка — это параметр
+    (model_name/model), и захардкоженная в label версия начинает врать,
+    когда юзер выбирает другую в Version-дропдауне."""
+    import re
+
+    from app.workflows import NODE_NAMES
+
+    for node_id, label in NODE_MODEL_LABEL.items():
+        assert not re.search(r"v\d|\d\.\d|p\d{3}|pro|master|turbo", label, re.I), (
+            f"node {node_id}: label {label!r} hardcodes a version/tier"
+        )
+        # GET /nodes (NODE_NAMES) и GET /nodes/video (NODE_MODEL_LABEL)
+        # должны называть одну ноду одинаково.
+        assert NODE_NAMES[node_id] == label
+
+
 def test_scenario_slots_reference_existing_slots():
     for (node_id, scenario), required in SCENARIO_SLOTS.items():
         schema = NODE_SLOTS[node_id]

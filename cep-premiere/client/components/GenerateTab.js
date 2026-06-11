@@ -14,6 +14,7 @@ import { valueLabel } from '../lib/param_labels.js';
 import {
   listNodesByFamily, getNodeMeta, getNodeFamily,
   getSlotsForScenario, nodeHasPrompt, nodeSupportsEnhancer,
+  getVersionParam,
 } from '../lib/slot_schema.js';
 import { saveDraftToStorageDebounced, createUploadActions } from '../lib/state.js';
 import { pickFilesFromDisk, readFileAsBlob, makeThumbDataURL } from '../lib/disk.js';
@@ -118,6 +119,9 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
   const slots = getSlotsForScenario({ videoNodes, nodeId: draft.model_id, scenario: draft.scenario });
   const showPrompt = nodeHasPrompt(meta);
   const supportsEnhancer = nodeSupportsEnhancer(meta);
+  // Версия движка (model_name/model) — отдельный дропдаун сразу под Model,
+  // НЕ в Advanced: иначе юзер не видит, какая версия реально уйдёт в Phygital.
+  const versionParam = getVersionParam(meta);
   // Voice: label/placeholder отражают семантику «текст для озвучки», а не
   // «промпт для модели». Для остальных семейств — дефолты PromptInput'а.
   const isVoice = family === 'voice';
@@ -455,6 +459,11 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
       ${!isVoice ? html`
         <${ModelPicker} nodes=${nodesInFamily} value=${draft.model_id}
           onChange=${id => actions.setModel(id, { videoNodes })} />
+        ${versionParam ? html`
+          <${VersionPicker} param=${versionParam}
+            value=${draft.params[versionParam.name] ?? (meta ? meta.default_params[versionParam.name] : undefined)}
+            onChange=${v => actions.setParam(versionParam.name, v)} />
+        ` : null}
         <${ScenarioPicker} scenarios=${scenarios} value=${draft.scenario}
           requiredSlots=${slots}
           onChange=${s => actions.setScenario(s, { videoNodes })} />
@@ -476,10 +485,24 @@ export function GenerateTab({ snap, actions, api, store, onSubmitted }) {
       ` : html`
         <${ParamsAccordion} defaults=${meta ? meta.default_params : {}}
           options=${meta ? meta.param_options : {}}
+          exclude=${versionParam ? [versionParam.name] : []}
           values=${draft.params} onChange=${actions.setParam} />
       `}
       <${CostBar} snap=${snap} api=${api} store=${store} />
       <${SubmitButton} snap=${snap} api=${api} store=${store} onSubmitted=${onSubmitted} />
+    </div>
+  `;
+}
+
+// Дропдаун версии движка под Model. Значения — те же enum'ы, что раньше
+// прятались в Advanced (kling_v3, omni_3, v_2_0...), с human-labels из
+// param_labels. Сам параметр исключается из ParamsAccordion (prop exclude).
+function VersionPicker({ param, value, onChange }) {
+  const opts = param.options.map(o => ({ value: o, label: valueLabel(o) }));
+  return html`
+    <div class="field">
+      <label>Version</label>
+      <${EnumDropdown} options=${opts} value=${value} onChange=${onChange} />
     </div>
   `;
 }
