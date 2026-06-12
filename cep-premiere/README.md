@@ -8,6 +8,11 @@ enabled in `manifest.xml`). It also **kills the sidecar when Pr quits** so you
 never have an orphan `python` listening on 8765 between sessions. No terminal
 window is involved.
 
+> Step-by-step install guides (with troubleshooting):
+> [`docs/INSTALL_WINDOWS.md`](../docs/INSTALL_WINDOWS.md) /
+> [`docs/INSTALL_MACOS.md`](../docs/INSTALL_MACOS.md).
+> The sections below are the condensed version.
+
 ---
 
 ## Prerequisites — Windows
@@ -42,18 +47,23 @@ New-Item -ItemType SymbolicLink `
 symlink works transparently — the sidecar `cwd` lands on the real repo folder,
 not the symlink path.
 
-### 3. Python 3.10+ on PATH
+### 3. Python 3.11+ and sidecar deps
 
-Sidecar dependencies live in `sidecar/pyproject.toml`. On a fresh Python 3.10
-the manual install was:
+Sidecar dependencies live in `sidecar/pyproject.toml`
+(`requires-python = ">=3.11"`). Recommended — project-local venv:
 
 ```powershell
-pip install loguru truststore pillow-heif playwright pydantic-settings python-ulid h2 fastapi uvicorn httpx
+cd sidecar
+py -3.11 -m venv .venv
+.\.venv\Scripts\Activate.ps1
+pip install -e ".[dev]"
+playwright install chromium
 ```
 
-The autostarter tries `pythonw` on PATH first, then `C:\Python3{10,11,12}\pythonw.exe`
-as fallbacks. `pythonw.exe` (no `w`-less `python.exe`) is intentional — it does
-not pop a console window.
+The autostarter tries `sidecar\.venv\Scripts\pythonw.exe` first (found
+automatically, no PATH changes needed), then `pythonw` on PATH, then
+`C:\Python3{10,11,12}\pythonw.exe` as fallbacks. `pythonw.exe` (not
+`python.exe`) is intentional — it does not pop a console window.
 
 ### 4. First-time sidecar setup
 
@@ -106,16 +116,24 @@ ln -s "$HOME/path/to/Phygital-Adobe-Studio/cep-premiere" \
 Apple-silicon Macs: nothing extra — Pr is universal, CEP runs in whatever
 arch Pr is launched as.
 
-### 3. Python 3.10+ on PATH
+### 3. Python 3.11+ and sidecar deps
 
 Homebrew is the common path:
 
 ```bash
 brew install python@3.11
-pip3 install loguru truststore pillow-heif playwright pydantic-settings python-ulid h2 fastapi uvicorn httpx
+cd sidecar
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+playwright install chromium
 ```
 
-The autostarter tries `python3` on PATH first, then:
+(Or just run `scripts/install_mac.sh` from the repo root — it does all of
+this, idempotently.)
+
+The autostarter tries `sidecar/.venv/bin/python3` first (found automatically),
+then `python3` on PATH, then:
 - `/opt/homebrew/bin/python3` (Apple silicon)
 - `/usr/local/bin/python3` (Intel Homebrew)
 - `/Library/Frameworks/Python.framework/Versions/3.{12,11,10}/bin/python3` (python.org)
@@ -125,7 +143,7 @@ The autostarter tries `python3` on PATH first, then:
 
 ```bash
 cd sidecar
-python3 scripts/auth_recon.py
+python3 -m scripts.auth_recon
 ```
 
 Session goes to `~/Library/Application Support/PhygitalStudio/session.json`.
@@ -215,4 +233,5 @@ to the next Python candidate.
 
 ## File layout
 
-See `docs/superpowers/specs/2026-05-21-pr-panel-design.md` §3.1.
+See [`docs/PROJECT_OVERVIEW.md`](../docs/PROJECT_OVERVIEW.md) — component map
+and per-file responsibilities for `client/` and `host/`.

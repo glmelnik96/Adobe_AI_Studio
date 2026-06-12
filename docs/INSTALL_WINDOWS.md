@@ -1,6 +1,10 @@
 # Установка на Windows
 
-Премьер 2024+ (CSXS 11/12), Python 3.10+, ffmpeg.
+Премьер 2024+ (CSXS 11/12), Python 3.11+, ffmpeg.
+
+**Текущая версия: V1.3** ([CHANGELOG](../CHANGELOG.md)). Обновление с
+предыдущей версии = `git pull` + **перезапуск sidecar-процесса** (см. §9 —
+рестарт Pr на sidecar не влияет).
 
 Полная архитектура — [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
 Подводные камни Windows — там же §11.2.
@@ -12,7 +16,7 @@
 | Зависимость | Версия | Проверить |
 |---|---|---|
 | Adobe Premiere Pro | 2024 (24.x) или 2025+ (25.x) | `Help → About Premiere Pro` |
-| Python | 3.10 / 3.11 / 3.12 | `python --version` или `pythonw --version` |
+| Python | **3.11+** (3.11 / 3.12; `requires-python = ">=3.11"` в `sidecar/pyproject.toml`) | `python --version` или `pythonw --version` |
 | ffmpeg | любая ≥ 4.x | `ffmpeg -version` |
 | Git | любая | `git --version` |
 | Node.js | **не нужен отдельно** — CEP содержит свой |
@@ -76,20 +80,20 @@ playwright install chromium
 > Set-ExecutionPolicy -Scope CurrentUser -ExecutionPolicy RemoteSigned
 > ```
 
-Альтернатива без venv (быстрее, но грязнее) — глобальный pip:
+Альтернатива без venv (быстрее, но грязнее) — глобальный pip
+(список = `dependencies` из `sidecar/pyproject.toml`):
 ```powershell
-pip install loguru truststore pillow-heif playwright pydantic-settings python-ulid h2 fastapi uvicorn httpx
+pip install fastapi "uvicorn[standard]" "httpx[http2]" truststore loguru Pillow pillow-heif playwright python-multipart pydantic pydantic-settings python-ulid
 playwright install chromium
 ```
 
 Autostart-логика панели пробует следующие интерпретаторы по очереди:
+- `sidecar\.venv\Scripts\pythonw.exe` (project-local venv — **находится сам**,
+  в `PATH` добавлять не нужно)
 - `pythonw` на `PATH`
 - `C:\Python310\pythonw.exe`
 - `C:\Python311\pythonw.exe`
 - `C:\Python312\pythonw.exe`
-
-Если используется venv — добавь его `Scripts\pythonw.exe` в `PATH` или
-ставь Python глобально.
 
 ---
 
@@ -132,8 +136,12 @@ mklink /D "%APPDATA%\Adobe\CEP\extensions\com.phygital.studio.pr" ^
 
 ```powershell
 cd $env:USERPROFILE\Documents\Phygital-Adobe-Studio\sidecar
-python -m scripts.cli auth login
+python -m scripts.auth_recon
 ```
+
+(Этот вариант — standalone, sidecar поднимать не надо. Альтернатива —
+`python -m scripts.cli auth login`, но она шлёт `POST /auth/recon` и требует
+**уже запущенного** sidecar'а на `127.0.0.1:8765`.)
 
 Откроется headed Chromium. Залогиниться в открывшемся окне обычным образом —
 скрипт ловит SuperTokens cookies, пишет `session.json` в
@@ -161,7 +169,8 @@ python -m scripts.cli auth login
 - В шапке панели появляется pill «online» (зелёная) — sidecar autostart-нулся
   и `/health` отвечает.
 - Рядом — pill с балансом кредитов аккаунта.
-- Можно выбрать модель, заполнить промпт, нажать Generate.
+- Видны вкладки семейств `Image / Video / Upscale / Voice`, под ними — Model,
+  Version (для нод с выбором версии движка) и Scenario.
 
 Если pill красный (offline):
 1. Подождать 15 секунд (autostart polls /health до 15s).
@@ -176,13 +185,17 @@ python -m scripts.cli auth login
 
 Smoke-test:
 
-1. **Nano Banana text2img.** Выбрать `Nano Banana (image)`, ввести любой prompt,
-   жать Generate. Через 10–30 сек в History должен появиться completed job.
+1. **Nano Banana text2img.** Вкладка `Image` → модель `Nano Banana` →
+   сценарий `Generate from prompt (text→image)` → любой prompt → Generate.
+   Через 10–30 сек в History должен появиться completed job.
 2. **Insert.** Жать `Insert` на job-карточке. Картинка должна импортироваться
    в bin Pr и (опционально) лечь на playhead активной sequence.
-3. **Frame extract.** Включить любой video-сценарий (Kling `start_prompt`),
-   выбрать видео в Source Monitor, жать `From Timeline frame`. Должен
-   подцепиться кадр (либо через QE DOM, либо ffmpeg fallback на sidecar'е).
+3. **Frame extract.** Вкладка `Video` → модель `Kling` → сценарий
+   `Start frame + prompt` → на слоте Start image жать `From Timeline frame` —
+   подцепится кадр из-под playhead'а активной sequence (статичная картинка
+   на дорожке — напрямую, видео — через ffmpeg `/extract-frame` на sidecar'е).
+4. **Voice TTS.** Вкладка `Voice` → ввести текст → выбрать голос → Generate.
+   В History появится mp3 с inline-плеером.
 
 ---
 
@@ -245,9 +258,16 @@ reg delete "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode /f
 
 ### `From Timeline frame` молча ничего не делает
 
-- QE DOM сломан на твоём билде Pr. Должен сработать ffmpeg fallback —
+- Кадр извлекается через ffmpeg на sidecar'е (`POST /extract-frame`) —
   проверить, что `ffmpeg` в `PATH` и что в DevTools нет ошибок от
-  `/clips/extract_frame`.
+  `/extract-frame`. Если playhead стоит не над video/image-клипом активной
+  sequence — будет toast с подсказкой, это не баг.
+
+### Обновился по `git pull`, но изменений не видно
+
+- Sidecar — отдельный Python-процесс; рестарт Pr его **не** перезапускает.
+  Убить (`Get-Process pythonw | Stop-Process`) и переоткрыть панель —
+  autostart поднимет новый процесс с новым кодом.
 
 ### img2img / i2v завершается через ~30 сек без ошибки
 

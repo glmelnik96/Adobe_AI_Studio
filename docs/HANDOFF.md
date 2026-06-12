@@ -12,55 +12,46 @@ sidecar pattern (FastAPI на `localhost:8765` поверх переисполь
 Источник истины по архитектуре — [ARCHITECTURE.md](ARCHITECTURE.md),
 по auth — [AUTH.md](AUTH.md).
 
-**Текущая версия:** V1.2-WIP (ветка `feat/history-ux-and-dropdown-fixes`,
-коммиты `e510421` + `cda87d3` + `197cb94`). Последний релиз — V1.1 (2026-05-23).
+**Текущая версия:** V1.3 (релиз 2026-06-02, tag `v1.3`, ветка `main`)
++ post-release fixes на `main` (`664f286`, `160d925`, `d3b4a95`, `db6f863`).
 История — [`CHANGELOG.md`](../CHANGELOG.md).
 
-### Активная ветка — что в ней уже сделано
+### Что вошло в V1.3 и post-release fixes
 
-1. **`EnumDropdown`** — custom dropdown через `position: fixed`, решает
-   обрезку native `<select>`-popup'а CEP-iframe'ом. Применён в
-   `ParamsAccordion`, `ScenarioPicker`, `ModelPicker`.
-2. **History**: `↻ Retry` (восстанавливает draft из `job.params` →
-   Generate-таб), `📋 Copy prompt` (через `execCommand` — clipboard API в
-   CEP-iframe не secure), click-to-expand preview prompt'а.
-3. **`🗑 Delete uploaded source cache`** в History-табе (раньше иконка без
-   подписи в Header'e) — с live size-counter + явный confirm.
-4. **`GET /jobs` отдаёт `params`** (без `_init_files`). Без этого
-   client-side `canRetry` оставался false → Retry/Copy не рендерились.
-5. **`/assets/disk-usage` + `DELETE /assets/disk-cache`** в sidecar
-   (объявлены до `/{sha256}` — иначе route shadowing).
-6. **Progress propagation**: `Workflow._emit_progress()` + on_progress
-   callback из `job_runner.run_job` → `JobState.progress` обновляется
-   плавно вместо «0% → 100% на completion». Backend'овский 0..100 / 0..1
-   нормализуется в 0..1, дубликаты подавляются.
-7. **Synth-progress fallback + first-poll diagnostic** (`197cb94`).
-   Если backend не отдаёт `progress` — рисуем linear ramp по elapsed
-   (image=25s / video=90s, cap 0.95). Реальный API-progress всегда
-   побеждает. На первом poll'е логируем полный список keys ответа
-   task_status — диагностика: точно ли бэкенд молчит.
+1. **Семейства нод**: Image / Video / Upscale / Voice — вкладки в панели,
+   `/nodes`, `/nodes/video`, `/nodes/upscale` в sidecar. Voice = ElevenLabs
+   TTS (node 89) с inline-плеером в History.
+2. **Видеоноды**: 74 Kling, 100 Seedance, 121 Kling Omni, 124 Kling Motion;
+   t2v-сценарий на 74/100/121. Метки нод — нейтральные семейства (без
+   версии), версия движка — параметр `model_name`/`model` и вынесена в
+   **Version-дропдаун** под Model (post-release `db6f863`).
+3. **Источники слотов**: Browse / From bin / From Timeline frame /
+   From Timeline In/Out / **Selected clip** (Higgsfield-style, `160d925`);
+   ffmpeg-обвязка на sidecar — `POST /extract-frame`, `POST /clip-video`.
+4. **Пресеты форм** (`/presets`, `presets.json` в AppData) + отказ от
+   авто-импорта чужих past-session jobs (`d3b4a95`).
+5. **Perf**: параллельный price+submit, adaptive polling, smart UI
+   rendering, фикс Cyrillic в evalScript (`664f286`).
+6. **Prompt Enhancer** (`POST /enhance`, Gemini Text node 72) —
+   preview-and-confirm UX.
+7. Topaz Video Upscale (87), GPT Image (98) — из V1.2-скоупа, в проде.
 
-### V1.2-WIP — следующий sprint (расширение модельного парка)
-
-In-flight: добавление T2V на нодах 74/100/121 + Topaz Video Upscale (87)
-+ GPT Image (98) + Prompt Enhancer через Gemini Text (72).
-
-**Источник истины по shape'ам и опциям нод:**
+**Источник истины по shape'ам и опциям видеонод/Topaz:**
 👉 [`V1.2_T2V_TOPAZ_NOTES.md`](V1.2_T2V_TOPAZ_NOTES.md)
 
 Там — реальные payload'ы из manual recon
 (`sidecar/recon-captures/20260531-162221-t2v-manual/`), Topaz dropdowns
-(скриншоты + backend codes), версионная матрица Kling/Seedance и open
-questions (что ещё надо доcкозать UI'ем). Любая правка
-`video_common.py` / `topaz_upscale.py` начинается с прочтения этого файла.
+(скриншоты + backend codes), версионная матрица Kling/Seedance. Любая
+правка `video_common.py` / `topaz_upscale.py` начинается с этого файла.
 
 ### Подводный камень при тестировании
 
 Sidecar — **отдельный Python-процесс**, перезапуск Pr на него не влияет.
-После `git pull` обязательно перезапустить uvicorn (`pkill -f uvicorn` →
-`./scripts/install_mac.sh` или ручной `python -m app.main` из `sidecar/`).
-Проверка: `lsof -iTCP:8765 -sTCP:LISTEN` должна показывать pid процесса,
-запущенного **после** последнего коммита.
+После `git pull` обязательно перезапустить sidecar: macOS —
+`pkill -f "app.main"`, Windows — `Get-Process pythonw | Stop-Process`;
+панель при следующем mount поднимет новый процесс сама (autostart).
+Проверка: процесс на порту 8765 должен быть запущен **после** последнего
+коммита (`lsof -iTCP:8765 -sTCP:LISTEN` / `Get-NetTCPConnection -LocalPort 8765`).
 
 ## Что прочитать в новом чате (в порядке приоритета)
 
@@ -94,9 +85,9 @@ Sidecar — **отдельный Python-процесс**, перезапуск P
   См. `windows_lessons.md`, `windows_port_conventions.md`.
 - **Перенос на Mac.** Все пути в `sidecar/` строить через `pathlib` + платформо-зависимые
   AppData / Application Support resolver'ы. Установка / autostart документированы
-  в [`cep-premiere/README.md`](../cep-premiere/README.md) — секции
-  «Prerequisites — Windows» и «Prerequisites — macOS» симметричны, расхождения
-  только в командах (reg add vs defaults write, mklink vs ln -s, taskkill vs kill -pgid).
+  в [`INSTALL_WINDOWS.md`](INSTALL_WINDOWS.md) и [`INSTALL_MACOS.md`](INSTALL_MACOS.md) —
+  шаги симметричны, расхождения только в командах
+  (reg add vs defaults write, mklink vs ln -s, taskkill vs kill -pgid).
 
 ## Открытые вопросы (ждут решения в фазе)
 

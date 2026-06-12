@@ -1,10 +1,11 @@
 # Установка на macOS
 
-Premiere Pro 2024+ (CSXS 11/12), Python 3.10+, ffmpeg.
+Premiere Pro 2024+ (CSXS 11/12), Python 3.11+, ffmpeg.
 
-**Текущая версия: V1.1** ([CHANGELOG](../CHANGELOG.md)) — установщик идемпотентен,
-обновление с V1.0 = `git pull && ./scripts/install_mac.sh` (skip-recon при
-наличии валидной сессии).
+**Текущая версия: V1.3** ([CHANGELOG](../CHANGELOG.md)) — установщик идемпотентен,
+обновление = `git pull && ./scripts/install_mac.sh` (skip-recon при
+наличии валидной сессии) + перезапуск sidecar-процесса (`pkill -f "app.main"` —
+рестарт Pr на sidecar не влияет, панель поднимет новый процесс сама).
 
 Полная архитектура — [`PROJECT_OVERVIEW.md`](PROJECT_OVERVIEW.md).
 Подводные камни macOS — там же §11.3.
@@ -45,7 +46,7 @@ chmod +x scripts/install_mac.sh
 | Зависимость | Версия | Проверить |
 |---|---|---|
 | Adobe Premiere Pro | 2024 (24.x) или 2025+ (25.x) | `Premiere Pro → About Premiere Pro` |
-| Python | 3.10+ (НЕ системный 3.9) | `python3 --version` |
+| Python | **3.11+** (НЕ системный 3.9; `requires-python = ">=3.11"` в `sidecar/pyproject.toml`) | `python3 --version` |
 | ffmpeg | любая ≥ 4.x | `ffmpeg -version` |
 | Git | любая (есть из Xcode CLI Tools) | `git --version` |
 | Homebrew (опционально) | last | `brew --version` |
@@ -58,9 +59,9 @@ chmod +x scripts/install_mac.sh
 
 Apple Silicon: brew ставится в `/opt/homebrew/`. Intel: в `/usr/local/`.
 
-### Поставить Python (3.10+)
+### Поставить Python (3.11+)
 
-**Не используй системный `/usr/bin/python3` — это 3.9.** Sidecar требует 3.10+.
+**Не используй системный `/usr/bin/python3` — это 3.9.** Sidecar требует 3.11+.
 
 Через Homebrew:
 ```bash
@@ -107,20 +108,21 @@ pip install -e ".[dev]"
 playwright install chromium
 ```
 
-Или глобально (быстрее, грязнее):
+Или глобально (быстрее, грязнее; список = `dependencies` из
+`sidecar/pyproject.toml`):
 ```bash
-pip3 install loguru truststore pillow-heif playwright pydantic-settings python-ulid h2 fastapi uvicorn httpx
+pip3 install fastapi "uvicorn[standard]" "httpx[http2]" truststore loguru Pillow pillow-heif playwright python-multipart pydantic pydantic-settings python-ulid
 playwright install chromium
 ```
 
 Autostart-логика панели пробует следующие интерпретаторы по очереди:
+- `sidecar/.venv/bin/python3` (project-local venv — **находится сам**,
+  в `PATH` добавлять не нужно; его создаёт `install_mac.sh`)
 - `python3` на `PATH`
 - `/opt/homebrew/bin/python3` (Apple Silicon Homebrew)
 - `/usr/local/bin/python3` (Intel Homebrew)
 - `/Library/Frameworks/Python.framework/Versions/3.{12,11,10}/bin/python3`
 - `/usr/bin/python3` (системный 3.9 — fallback, лучше избегать)
-
-Если используется venv, добавь его `bin/python3` в `PATH` через `~/.zshrc`.
 
 ---
 
@@ -209,13 +211,17 @@ SuperTokens cookies и пишет `session.json` в
 
 Smoke-test:
 
-1. **Nano Banana text2img.** Выбрать `Nano Banana (image)`, ввести любой
-   prompt, жать Generate. Через 10–30 сек в History — completed job.
+1. **Nano Banana text2img.** Вкладка `Image` → модель `Nano Banana` →
+   сценарий `Generate from prompt (text→image)` → любой prompt → Generate.
+   Через 10–30 сек в History — completed job.
 2. **Insert.** На job-карточке жать `Insert`. Картинка импортируется в bin Pr
    и (опционально) ложится на playhead активной sequence.
-3. **Frame extract.** Включить video-сценарий (Kling `start_prompt`), выбрать
-   видео в Source Monitor, жать `From Timeline frame`. Кадр должен подцепиться
-   (либо QE DOM, либо ffmpeg fallback).
+3. **Frame extract.** Вкладка `Video` → модель `Kling` → сценарий
+   `Start frame + prompt` → на слоте Start image жать `From Timeline frame` —
+   подцепится кадр из-под playhead'а активной sequence (статичная картинка
+   на дорожке — напрямую, видео — через ffmpeg `/extract-frame` на sidecar'е).
+4. **Voice TTS.** Вкладка `Voice` → ввести текст → выбрать голос → Generate.
+   В History появится mp3 с inline-плеером.
 
 ---
 
@@ -281,8 +287,16 @@ defaults delete com.adobe.CSXS.12 PlayerDebugMode
 
 ### `From Timeline frame` молча ничего не делает
 
-- QE DOM не работает на этом билде. Должен сработать ffmpeg fallback —
-  проверить `ffmpeg -version` и DevTools на ошибки `/clips/extract_frame`.
+- Кадр извлекается через ffmpeg на sidecar'е (`POST /extract-frame`) —
+  проверить `ffmpeg -version` и DevTools на ошибки `/extract-frame`.
+  Если playhead стоит не над video/image-клипом активной sequence —
+  будет toast с подсказкой, это не баг.
+
+### Обновился по `git pull`, но изменений не видно
+
+- Sidecar — отдельный Python-процесс; рестарт Pr его **не** перезапускает.
+  `pkill -f "app.main"` и переоткрыть панель — autostart поднимет новый
+  процесс с новым кодом.
 
 ### img2img / i2v завершается через ~30 сек без ошибки
 

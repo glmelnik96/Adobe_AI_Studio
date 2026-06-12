@@ -1,26 +1,28 @@
 # Adobe AI Studio
 
 Две независимые CEP-панели (Adobe Premiere Pro и After Effects) + локальный Python-sidecar.
-Цель — генерировать изображения и видео (Sora, VEO, Runway, Kling, Nano Banana, Flux,
-GPT Image и др.) прямо из интерфейса Adobe и автоматически класть результат на таймлайн
-(Pr) или в активный composition (AE).
+Цель — генерировать изображения, видео, апскейлы и озвучку (Nano Banana, GPT Image,
+Kling, Seedance, Kling Omni, Kling Motion, Topaz Video Upscale, ElevenLabs TTS)
+прямо из интерфейса Adobe и автоматически класть результат на таймлайн (Pr)
+или в активный composition (AE).
 
-**Status (2026-05-23, V1.1):**
-- Sub-project A (sidecar MVP) — реализация завершена, **168 тестов**.
-  V1.1: Idempotency-Key, `/v1/` versioning, cursor-pagination, HEAD на download.
-- Sub-project B (Pr-панель) — реализация завершена, **56 тестов**, проходит manual E2E.
-  V1.1: persistent thumbnails, queue widget с per-job cancel, cost preview, auto-fill image slot.
-- Sub-project C (AE-панель) — scaffold готов (`cep-ae/CSXS/manifest.xml` + stub
+**Status (2026-06, V1.3 + post-release fixes):**
+- Sidecar — **274 теста** (pytest). Семейства нод: Image / Video / Upscale / Voice;
+  `/enhance` (prompt enhancer), `/presets` (пресеты форм), `/extract-frame` и
+  `/clip-video` (ffmpeg-обвязка таймлайна), Idempotency-Key, `/v1/` versioning.
+- Pr-панель — **175 тестов** (vitest), проходит manual E2E. Вкладки семейств,
+  Version-дропдаун, источники слотов From bin / From Timeline / Selected clip,
+  queue widget, cost preview, пресеты форм, inline-плеер для TTS.
+- AE-панель — scaffold готов (`cep-ae/CSXS/manifest.xml` + stub
   `client/panel.js` + `host/insert_media.jsx`), реализации UI/HTTP-клиента нет.
-- Sub-project D (видеоноды) — реализовано в sidecar, доступно через Pr-панель.
 
-Все изменения V1.1 — в [CHANGELOG.md](CHANGELOG.md).
+История изменений — в [CHANGELOG.md](CHANGELOG.md).
 
 ## Документация
 
 | Документ | О чём |
 |---|---|
-| [CHANGELOG.md](CHANGELOG.md) | История версий (последняя — V1.1) |
+| [CHANGELOG.md](CHANGELOG.md) | История версий (последняя — V1.3) |
 | [docs/PROJECT_OVERVIEW.md](docs/PROJECT_OVERVIEW.md) | Как работает целиком: компоненты, e2e пайплайны, persistence, подводные камни |
 | [docs/INSTALL_WINDOWS.md](docs/INSTALL_WINDOWS.md) | Пошаговая установка на Windows + траблшут |
 | [docs/INSTALL_MACOS.md](docs/INSTALL_MACOS.md) | Пошаговая установка на macOS + траблшут |
